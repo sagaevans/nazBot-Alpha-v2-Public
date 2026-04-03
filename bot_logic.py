@@ -233,7 +233,7 @@ def execute_adaptive_order(symbol: str, side: str, position_side: str, tf: str) 
 
         raw_qty = (BASE_MARGIN * LEVERAGE) / curr_price
         qty = round(math.floor(raw_qty / qty_step) * qty_step, 8)
-        
+
         # FIX: Menjepit kuantitas agar sesuai aturan bursa
         qty = min(max_qty, max(min_qty, qty))
 
@@ -316,7 +316,7 @@ def _scan_vip(active_keys: list[str], vip_count: int) -> tuple[list[str], int]:
 
 def _scan_alts(active_keys: list[str], alt_count: int) -> tuple[list[str], int]:
     tickers = _api_call(_client.futures_ticker)
-    
+
     # FIX: Pastikan VIP_SYMBOLS tidak ikut di-scan di Hunter Squad (Altcoin)
     alts = [
         t['symbol']
