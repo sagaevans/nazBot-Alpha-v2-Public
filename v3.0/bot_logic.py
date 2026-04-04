@@ -1,6 +1,6 @@
 """
 bot_logic.py — nazBot Alpha 2.0 (LONG ONLY, 50x Auto-Lev, DCA Berlapis + 4th Wall S/R)
-OPTIMIZED VERSION: API caching, rate‑limiting, exponential backoff, vectorized ops.
+OPTIMIZED VERSION (FIXED SIGNAL) - Preserved original signal logic, added caching/rate limiting.
 - Mode: LONG ONLY (VIP & ALT)
 - Leverage: 50x (Auto turun ke batas maksimal jika ditolak)
 - Base Margin: $5
@@ -17,10 +17,8 @@ import time
 import logging
 import random
 from typing import Optional, Dict, List, Any
-from datetime import datetime, timedelta
 
 import pandas as pd
-import numpy as np
 from ta.trend import ema_indicator, sma_indicator
 from ta.volatility import BollingerBands
 from binance.client import Client
@@ -53,7 +51,7 @@ BB_WINDOW = 20
 VOL_LOOKBACK = 5
 
 VIP_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "ADAUSDT", "DOTUSDT"]
-VIP_SET = set(VIP_SYMBOLS)                     # O(1) lookup
+VIP_SET = set(VIP_SYMBOLS)
 VIP_TF = '15m'
 ALT_TFS = ['1m', '3m', '5m', '15m', '1h', '4h']
 TOP_ALT_LIMIT = 50
@@ -69,7 +67,6 @@ _ticker_cache: Dict[str, Any] = {"data": None, "timestamp": 0}
 _TICKER_CACHE_TTL = 5.0  # seconds
 
 # ---------- RATE LIMITER ----------
-# Simple token bucket: 20 calls per second (Binance allows 1200 per minute)
 _RATE_LIMIT_CALLS = 20
 _RATE_LIMIT_PERIOD = 1.0
 _last_call_time = 0.0
@@ -83,23 +80,20 @@ def _rate_limit():
         time.sleep(sleep_time)
     _last_call_time = time.monotonic()
 
-# ---------- ENHANCED API CALL WITH EXPONENTIAL BACKOFF & RETRY-AFTER ----------
+# ---------- ENHANCED API CALL WITH EXPONENTIAL BACKOFF ----------
 def _api_call(fn, *args, max_retries: int = 5, **kwargs):
     for attempt in range(max_retries):
-        _rate_limit()  # enforce rate limit before each call
+        _rate_limit()
         try:
             return fn(*args, **kwargs)
         except BinanceAPIException as e:
-            # Specific codes that should NOT be retried (e.g., leverage error -4028)
             if e.code in (-4028, -2011, -2021):
                 raise
-            # Rate limit (HTTP 418 or 429)
             if e.code == -1003 or "Too many requests" in e.message:
                 wait = 2 ** attempt + random.uniform(0, 1)
                 logger.warning(f"Rate limit hit, retrying in {wait:.2f}s")
                 time.sleep(wait)
                 continue
-            # Other retry‑able Binance errors
             wait = 2 ** attempt + random.uniform(0, 0.5)
             logger.warning(f"API Retry {attempt+1}/{max_retries} [{e.code}]: {e.message}")
             time.sleep(wait)
@@ -114,7 +108,6 @@ def _api_call(fn, *args, max_retries: int = 5, **kwargs):
     raise RuntimeError(f"API call failed after {max_retries} attempts: {fn.__name__}")
 
 def _get_exchange_filters(symbol: str) -> dict:
-    """Cached exchange info filters."""
     if symbol not in _exchange_filter_cache:
         info = _api_call(_client.futures_exchange_info)
         for s in info['symbols']:
@@ -122,7 +115,6 @@ def _get_exchange_filters(symbol: str) -> dict:
     return _exchange_filter_cache[symbol]
 
 def _get_cached_ticker() -> List[dict]:
-    """Cached futures ticker (quoteVolume sorted) with TTL."""
     global _ticker_cache
     now = time.time()
     if _ticker_cache["data"] is None or (now - _ticker_cache["timestamp"]) > _TICKER_CACHE_TTL:
@@ -167,63 +159,49 @@ def _set_safe_leverage(symbol: str, target_lev: int) -> int:
     except Exception:
         return target_lev
 
-# ---------- SIGNAL LOGIC (OPTIMIZED WITH NUMPY / VECTORIZATION) ----------
+# ========== SIGNAL LOGIC – EXACTLY AS ORIGINAL (NO CHANGES) ==========
 def get_adaptive_signal(symbol: str, tf: str, is_vip: bool) -> Optional[dict]:
     try:
         bars = _api_call(_client.futures_klines, symbol=symbol, interval=tf, limit=300)
-        # Convert only needed columns and use float32 to reduce memory
-        df = pd.DataFrame(bars, columns=['time','open','high','low','close','volume'])[['open','high','low','close','volume']].astype(np.float32)
+        df = pd.DataFrame(bars, columns=['time','open','high','low','close','volume','ct','qv','tr','tb','tq','i'])[['open','high','low','close','volume']].astype(float)
 
         if len(df) < EMA_TREND + 1:
             return None
 
-        close = df['close'].values
-        low = df['low'].values
-        volume = df['volume'].values
+        close = df['close']
+        ema200 = ema_indicator(close, window=EMA_TREND)
+        ma99 = sma_indicator(close, window=MA_STRUCT)
+        bb = BollingerBands(close=close, window=BB_WINDOW, window_dev=2)
 
-        # Vectorized indicators (ta library already uses numpy)
-        ema200 = ema_indicator(pd.Series(close), window=EMA_TREND).values
-        ma99 = sma_indicator(pd.Series(close), window=MA_STRUCT).values
-        bb = BollingerBands(close=pd.Series(close), window=BB_WINDOW, window_dev=2)
-        bb_lower = bb.bollinger_lband().values
-
-        # Volume moving average (vectorized)
-        vol_ma = np.full_like(volume, np.nan)
-        if len(volume) > VOL_LOOKBACK:
-            vol_ma[VOL_LOOKBACK:] = pd.Series(volume).shift(1).rolling(window=VOL_LOOKBACK).mean().values[VOL_LOOKBACK:]
-        # Forward fill (simplified)
-        vol_ma = pd.Series(vol_ma).bfill().values
+        df['vol_ma'] = df['volume'].shift(1).rolling(window=VOL_LOOKBACK).mean()
+        df.bfill(inplace=True)
 
         idx_curr = len(df) - 1
-        idx_prev = idx_curr - 1
+        idx_prev = len(df) - 2
+        c_close = close.iat[idx_curr]
+        c_low = df['low'].iat[idx_curr]
+        c_ema200 = ema200.iat[idx_curr]
+        c_ma99 = ma99.iat[idx_curr]
+        c_bb_dn = bb.bollinger_lband().iat[idx_curr]
+        p_open = df['open'].iat[idx_prev]
+        p_close = close.iat[idx_prev]
+        p_low = df['low'].iat[idx_prev]
 
-        c_close = close[idx_curr]
-        c_low = low[idx_curr]
-        c_ema200 = ema200[idx_curr]
-        c_ma99 = ma99[idx_curr]
-        c_bb_dn = bb_lower[idx_curr]
-
-        p_open = df['open'].values[idx_prev]
-        p_close = close[idx_prev]
-        p_low = low[idx_prev]
-        p_vol = volume[idx_prev]
-        p_vol_ma = vol_ma[idx_prev]
-
-        is_vol_exhausted = p_vol < p_vol_ma
+        is_vol_exhausted = df['volume'].iat[idx_prev] < df['vol_ma'].iat[idx_prev]    
         shadow_req = 2.0 if is_vip else 0.8
 
-        # Tembok 1,2,3 (Dinamis)
-        dynamic_floors = [v for v in (c_ema200, c_ma99, c_bb_dn) if v < c_close]
-        closest_dynamic = max(dynamic_floors) if dynamic_floors else 0.0
+        # Tembok 1, 2, 3 (Dinamis: EMA, SMA, BB)
+        dynamic_floors = [t for t in [c_ema200, c_ma99, c_bb_dn] if t < c_close]
+        closest_dynamic = max(dynamic_floors) if dynamic_floors else 0
         hit_dynamic = closest_dynamic > 0 and (abs(c_low - closest_dynamic) / closest_dynamic) <= PROXIMITY_PCT
 
-        # Tembok 4 (Statis) – using NumPy for speed
-        static_support = np.min(low[-100:-5]) if len(low) >= 105 else 0.0
+        # Tembok 4 (Statis/Historis)
+        static_support = df['low'].iloc[-100:-5].min()
         hit_static = static_support > 0 and (abs(c_low - static_support) / static_support) <= PROXIMITY_PCT
 
         if hit_dynamic or hit_static:
             if is_vol_exhausted and p_close > p_open:
-                body = abs(p_close - p_open) or 1e-8
+                body = abs(p_close - p_open) or 0.00000001
                 if ((min(p_open, p_close) - p_low) / body) >= shadow_req:
                     reason = "Tembok Dinamis (EMA/SMA/BB)" if hit_dynamic else "Tembok Statis (Historical Support)"
                     return {'side': 'LONG', 'reason': reason}
@@ -231,7 +209,7 @@ def get_adaptive_signal(symbol: str, tf: str, is_vip: bool) -> Optional[dict]:
     except Exception:
         return None
 
-# ---------- EXECUTION (UNCHANGED LOGIC, ONLY ERROR HANDLING ENHANCED) ----------
+# ---------- EXECUTION (UNCHANGED) ----------
 def execute_order(symbol: str, side: str, position_side: str, margin_to_use: float, is_dca: bool = False) -> bool:
     try:
         f = _get_exchange_filters(symbol)
@@ -269,7 +247,7 @@ def execute_order(symbol: str, side: str, position_side: str, margin_to_use: flo
         logger.error(f"Order Fail [{symbol}]: {e}")
         return False
 
-# ---------- DCA MONITOR (PRESERVED EXACT LOGIC) ----------
+# ---------- DCA MONITOR (EXACTLY AS ORIGINAL) ----------
 def _monitor_positions(positions: List[dict]):
     for p in positions:
         amt = float(p['positionAmt'])
@@ -296,7 +274,7 @@ def _monitor_positions(positions: List[dict]):
             logger.info(f"🔥 DCA TAHAP 3 TERAKHIR (-300% ROE) untuk {symbol}. Nembak ${DCA_3_AMOUNT}!")
             execute_order(symbol, 'BUY', 'LONG', DCA_3_AMOUNT, is_dca=True)
 
-# ---------- MAIN BOT LOOP (OPTIMIZED CACHING & RATE LIMITING) ----------
+# ---------- MAIN BOT LOOP ----------
 def run_bot() -> None:
     setup_account_environment()
     while True:
@@ -312,7 +290,7 @@ def run_bot() -> None:
             vip_count = sum(1 for k in active_keys if k.split('_')[0] in VIP_SET)
             alt_count = sum(1 for k in active_keys if k.split('_')[0] not in VIP_SET)
 
-            # --- VIP SCAN ---
+            # VIP SCAN
             for symbol in VIP_SYMBOLS:
                 if vip_count >= MAX_VIP:
                     break
@@ -324,7 +302,7 @@ def run_bot() -> None:
                             vip_count += 1
                             active_keys.append(f"{symbol}_LONG")
 
-            # --- ALT SCAN (USING CACHED TICKER) ---
+            # ALT SCAN (using cached ticker)
             tickers = _get_cached_ticker()
             alts = [t['symbol'] for t in sorted(tickers, key=lambda x: float(x['quoteVolume']), reverse=True)
                     if t['symbol'].endswith('USDT') and t['symbol'] not in VIP_SET][:TOP_ALT_LIMIT]
@@ -343,7 +321,7 @@ def run_bot() -> None:
                             alt_count += 1
                             active_keys.append(f"{symbol}_LONG")
                         break
-                    time.sleep(0.2)  # small delay between TF scans
+                    time.sleep(0.2)
 
             time.sleep(15)
         except Exception as e:
