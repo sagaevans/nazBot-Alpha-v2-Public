@@ -12,7 +12,8 @@ client = Client(API_KEY, API_SECRET, testnet=True)
 STATE_FILE = 'status.txt'
 INITIAL_BALANCE = 5000.0 
 
-VIP_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "ADAUSDT", "DOTUSDT"]
+# --- VIP SYMBOLS 8 KOIN ---
+VIP_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "ADAUSDT", "DOTUSDT", "XRPUSDT", "ALICEUSDT"]
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -20,7 +21,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>nazBot Alpha 2.0</title>
+    <title>nazBot Alpha 4.0 PRO</title>
     <style>
         body { background-color: #0f172a; color: #f8fafc; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; }
         .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 20px; margin-bottom: 20px; flex-wrap: wrap; gap: 15px; }
@@ -44,17 +45,14 @@ HTML_TEMPLATE = """
         th { color: #94a3b8; font-weight: 600; font-size: 14px; text-transform: uppercase; }
         tbody tr:hover { background-color: #334155; }
         .badge-long { background-color: rgba(74, 222, 128, 0.2); color: #4ade80; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 12px;}
-        .slot-tracker { display: inline-block; background-color: #0f172a; padding: 5px 12px; border-radius: 6px; font-size: 13px; color: #38bdf8; border: 1px solid #334155; margin-left: 15px; vertical-align: middle; }
-        .slot-tracker span { font-weight: bold; color: #f8fafc; }
         .badge-lev { background-color: rgba(56, 189, 248, 0.2); color: #38bdf8; padding: 3px 6px; border-radius: 4px; font-weight: bold; font-size: 11px; margin-left: 10px;}
     </style>
 </head>
 <body>
-
     <div class="header">
-        <h1>🎯 nazBot Alpha 2.0 
+        <h1>🎯 nazBot Alpha 4.0 PRO 
             <span style="font-size: 14px; color:#94a3b8;">| Sniper Mode: NO-SL</span>
-            <span class="badge-lev">⚡ MAX LEVERAGE: 50x (Auto-Adjust)</span>
+            <span class="badge-lev">⚡ Dynamic Margin Balance Active</span>
         </h1>
         <div class="controls">
             <button id="toggleBtn" onclick="toggleBot()">LOADING...</button>
@@ -82,19 +80,11 @@ HTML_TEMPLATE = """
     </div>
 
     <div class="table-container">
-        <h3 style="margin-top:0; color:#eab308; display: flex; align-items: center;">
-            👑 VIP Positions (<span id="vip_count">0</span>/6)
-        </h3>
+        <h3 style="margin-top:0; color:#eab308;">👑 VIP Positions (<span id="vip_count">0</span>/8)</h3>
         <table>
             <thead>
                 <tr>
-                    <th>Symbol</th>
-                    <th>Side</th>
-                    <th>Lev</th>
-                    <th>Margin</th>
-                    <th>Entry Price</th>
-                    <th>ROE (%)</th>
-                    <th>Unrealized PNL ($)</th>
+                    <th>Symbol</th><th>Side</th><th>Lev</th><th>Margin</th><th>Entry Price</th><th>ROE (%)</th><th>Unrealized PNL ($)</th>
                 </tr>
             </thead>
             <tbody id="vip-table">
@@ -104,19 +94,11 @@ HTML_TEMPLATE = """
     </div>
 
     <div class="table-container">
-        <h3 style="margin-top:0; color:#38bdf8; display: flex; align-items: center;">
-            🚀 Altcoin Positions (<span id="alt_count">0</span>/8)
-        </h3>
+        <h3 style="margin-top:0; color:#38bdf8;">🚀 Altcoin Positions (<span id="alt_count">0</span>/8)</h3>
         <table>
             <thead>
                 <tr>
-                    <th>Symbol</th>
-                    <th>Side</th>
-                    <th>Lev</th>
-                    <th>Margin</th>
-                    <th>Entry Price</th>
-                    <th>ROE (%)</th>
-                    <th>Unrealized PNL ($)</th>
+                    <th>Symbol</th><th>Side</th><th>Lev</th><th>Margin</th><th>Entry Price</th><th>ROE (%)</th><th>Unrealized PNL ($)</th>
                 </tr>
             </thead>
             <tbody id="alt-table">
@@ -152,11 +134,11 @@ HTML_TEMPLATE = """
                     currentStatus = data.bot_status;
                     updateToggleButton();
                 }
-            } catch(e) { alert('Gagal mengubah status bot!'); }
+            } catch(e) { alert('Gagal mengubah status!'); }
         }
 
         async function closeAllPositions() {
-            if(!confirm("Yakin ingin MENUTUP SEMUA POSISI secara paksa (Market Order)?")) return;
+            if(!confirm("Yakin ingin MENUTUP SEMUA POSISI secara paksa?")) return;
             try {
                 const res = await fetch('/api/close_all', { method: 'POST' });
                 const data = await res.json();
@@ -175,16 +157,16 @@ HTML_TEMPLATE = """
 
                     const roiElem = document.getElementById('net_roi');
                     const netSign = data.net_profit >= 0 ? '+' : '-';
-                    roiElem.innerHTML = `${netSign}$${Math.abs(data.net_profit).toFixed(2)} <span style="font-size:16px; font-weight:normal; color:#cbd5e1;">(${netSign}${Math.abs(data.net_roi).toFixed(2)}%)</span>`;
+                    roiElem.innerHTML = `${netSign}$${Math.abs(data.net_profit).toFixed(2)} <span style="font-size:16px; color:#cbd5e1;">(${netSign}${Math.abs(data.net_roi).toFixed(2)}%)</span>`;
                     roiElem.className = data.net_profit >= 0 ? 'text-green' : 'text-red';
 
                     const floatElem = document.getElementById('floating_pnl');
                     if (data.total_unrealized === 0) {
-                        floatElem.innerHTML = `+$0.00 <span style="font-size:16px; font-weight:normal; color:#cbd5e1;">(0.00%)</span>`;
+                        floatElem.innerHTML = `+$0.00 <span style="font-size:16px; color:#cbd5e1;">(0.00%)</span>`;
                         floatElem.className = 'text-white';
                     } else {
                         const floatSign = data.total_unrealized > 0 ? '+' : '-';
-                        floatElem.innerHTML = `${floatSign}$${Math.abs(data.total_unrealized).toFixed(2)} <span style="font-size:16px; font-weight:normal; color:#cbd5e1;">(${floatSign}${Math.abs(data.floating_roe).toFixed(2)}%)</span>`;
+                        floatElem.innerHTML = `${floatSign}$${Math.abs(data.total_unrealized).toFixed(2)} <span style="font-size:16px; color:#cbd5e1;">(${floatSign}${Math.abs(data.floating_roe).toFixed(2)}%)</span>`;
                         floatElem.className = data.total_unrealized > 0 ? 'text-green' : 'text-red';
                     }
 
@@ -194,37 +176,28 @@ HTML_TEMPLATE = """
 
                     const vipTbody = document.getElementById('vip-table');
                     const altTbody = document.getElementById('alt-table');
-
-                    let vipHtml = '';
-                    let altHtml = '';
+                    let vipHtml = ''; let altHtml = '';
 
                     data.positions.forEach(pos => {
-                        const sideBadge = pos.side === 'LONG' ? '<span class="badge-long">LONG</span>' : '<span class="badge-long">LONG</span>';
                         const colorClass = pos.roe >= 0 ? 'text-green' : 'text-red';
-
                         const rowHtml = `<tr>
                             <td style="font-weight:bold; color:#f8fafc;">${pos.symbol}</td>
-                            <td>${sideBadge}</td>
+                            <td><span class="badge-long">LONG</span></td>
                             <td style="color:#38bdf8; font-weight:bold;">${pos.leverage}x</td>
-                            <td style="color:#cbd5e1;">$${pos.margin.toFixed(2)}</td>
+                            <td style="color:#cbd5e1; font-weight:bold;">$${pos.margin.toFixed(2)}</td>
                             <td style="color:#cbd5e1;">$${pos.entryPrice}</td>
                             <td class="${colorClass}" style="font-weight:bold;">${pos.roe.toFixed(2)}%</td>
                             <td class="${colorClass}" style="font-weight:bold;">$${pos.unrealizedPNL.toFixed(2)}</td>
                         </tr>`;
 
-                        if (pos.type === 'VIP') {
-                            vipHtml += rowHtml;
-                        } else {
-                            altHtml += rowHtml;
-                        }
+                        if (pos.type === 'VIP') vipHtml += rowHtml;
+                        else altHtml += rowHtml;
                     });
 
                     vipTbody.innerHTML = vipHtml || '<tr><td colspan="7" style="text-align:center; color:#94a3b8;">Tidak ada posisi VIP aktif. Mengintai market... 👀</td></tr>';
                     altTbody.innerHTML = altHtml || '<tr><td colspan="7" style="text-align:center; color:#94a3b8;">Tidak ada posisi Altcoin aktif. Mengintai market... 👀</td></tr>';
                 }
-            } catch (error) {
-                console.error("Gagal mengambil data:", error);
-            }
+            } catch (error) { console.error("Data error:", error); }
         }
 
         updateToggleButton();
@@ -237,8 +210,7 @@ HTML_TEMPLATE = """
 
 def _atomic_write(filepath, content):
     fd, temp_path = tempfile.mkstemp(dir=os.path.dirname(filepath))
-    with os.fdopen(fd, 'w') as f:
-        f.write(content)
+    with os.fdopen(fd, 'w') as f: f.write(content)
     os.replace(temp_path, filepath)
 
 @app.route('/')
@@ -263,8 +235,7 @@ def get_data():
 
         positions = client.futures_position_information()
         active_pos = []
-        vip_c = 0
-        alt_c = 0
+        vip_c = alt_c = 0
 
         for p in positions:
             amt = float(p['positionAmt'])
@@ -273,7 +244,6 @@ def get_data():
                 mark_price = float(p['markPrice'])
                 entry_price = float(p['entryPrice'])
                 unrealized = float(p['unRealizedProfit'])
-
                 leverage = float(p.get('leverage', 50))
                 margin = (abs(amt) * mark_price) / leverage
                 roe = (unrealized / margin * 100) if margin > 0 else 0
@@ -283,24 +253,17 @@ def get_data():
                 else: alt_c += 1
 
                 active_pos.append({
-                    "symbol": symbol,
-                    "side": "LONG",
-                    "leverage": int(leverage),
-                    "margin": round(margin, 2),
-                    "entryPrice": entry_price,
-                    "roe": round(roe, 2),
-                    "unrealizedPNL": round(unrealized, 2),
-                    "type": "VIP" if is_vip else "ALT"
+                    "symbol": symbol, "leverage": int(leverage), "margin": round(margin, 2),
+                    "entryPrice": entry_price, "roe": round(roe, 2),
+                    "unrealizedPNL": round(unrealized, 2), "type": "VIP" if is_vip else "ALT"
                 })
 
         return jsonify({
-            "status": "success", "balance": round(usdt_balance, 2), "net_profit": round(net_profit, 2),
-            "net_roi": round(net_roi, 2), "total_unrealized": round(total_unrealized, 2),
-            "floating_roe": round(floating_roe, 2), "total_equity": round(total_equity, 2),
-            "positions": active_pos, "vip_count": vip_c, "alt_count": alt_c
+            "status": "success", "balance": usdt_balance, "net_profit": net_profit,
+            "net_roi": net_roi, "total_unrealized": total_unrealized, "floating_roe": floating_roe,
+            "total_equity": total_equity, "positions": active_pos, "vip_count": vip_c, "alt_count": alt_c
         })
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+    except Exception as e: return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/api/toggle', methods=['POST'])
 def toggle_bot():
