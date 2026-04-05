@@ -7,7 +7,15 @@ nazBot Sniper System adalah bot trading otomatis berbasis Python yang dirancang 
 * **Escalation Timeframe & Anti-Pingpong:** Bot memiliki memori (cooldown 1 jam) untuk koin yang baru saja di-close, dan otomatis menaikkan analisis Timeframe (5m -> 15m) jika market terdeteksi *sideways*.
 * **Radar Emas (Single Exposure):** Pemantauan khusus untuk `XAUUSDT`, `XAUTUSDT`, dan `PAXGUSDT`. Sistem memastikan hanya 1 pair emas yang boleh aktif dalam satu waktu.
 * **8-Column Ledger System:** Pencatatan otomatis ke `profit_ledger.txt` setiap kali Take Profit/Stop Loss menyentuh target. Mencatat: Waktu, Pair, Profit $, ROE %, Total PnL, Total ROE, Saldo Riil, dan Growth Modal %.
-* **Dynamic DCA (Average Down):** Sistem injeksi margin 3 tahap berdasarkan persentase penurunan ROE untuk menyelamatkan posisi *floating*.
+* **6-Stage Survival DCA:** Strategi pemulihan harga (Average Down) yang agresif dan terukur:
+    | Tahap | Jarak Penurunan (ROE) | Suntikan Margin | Tujuan |
+    |-------|-----------------------|-----------------|--------|
+    | DCA 1 | -50%                  | 0.5x Awal       | Koreksi Tipis |
+    | DCA 2 | -100%                 | 0.5x Awal       | Koreksi Normal |
+    | DCA 3 | -200%                 | 1.0x Awal       | Reversal Area |
+    | DCA 4 | -400%                 | 2.0x Total      | Survival Mode |
+    | DCA 5 | -800%                 | 4.0x Total      | Last Stand |
+    | DCA 6 | -1200%                | Sisa Slot       | Hard Recovery |
 * **Web Dashboard UI:** Visualisasi data *real-time* berbasis Flask & Chart.js, menampilkan grafik pertumbuhan saldo *live*, status koin aktif (VIP/ALT/GOLD), dan tabel jurnal transaksi.
 
 ## 🛠️ Stack Teknologi
