@@ -24,20 +24,20 @@ nazBot Sniper System adalah bot trading otomatis berbasis Python yang dirancang 
    python main.py
    Buka URL Web Dashboard yang disediakan server (port 8080) dan klik "START BOT".
 
-🚀 POSSIBLE UPGRADE V3.0 (Blueprint)
+## 🚀 POSSIBLE UPGRADE V3.0 (Blueprint)
 Pembaruan selanjutnya akan berfokus pada diferensiasi gaya trading antara koin VIP dan komoditas Emas untuk meminimalisir risiko dan memaksimalkan cuan di market bullish.
 
-1. Agresif VIP Mode (100% ROE Target): Khusus untuk kasta koin VIP, aturan Take Profit (TP) akan diubah secara statis menjadi 100% ROE dari margin entry. Mode Hit & Run akan dioptimalkan untuk mengejar target ganda.
+* ** 1. Agresif VIP Mode (100% ROE Target):**  Khusus untuk kasta koin VIP, aturan Take Profit (TP) akan diubah secara statis menjadi 100% ROE dari margin entry. Mode Hit & Run akan dioptimalkan untuk mengejar target ganda.
 
-2. Gold Semi-Spot Mode: Pendekatan investasi jangka panjang khusus untuk Emas (XAU, XAUT, PAXG):
+* ** 2. Gold Semi-Spot Mode:** Pendekatan investasi jangka panjang khusus untuk Emas (XAU, XAUT, PAXG):
 
-Max Leverage: Dikunci aman pada 10x (menyerupai Semi-Spot).
+* ** Max Leverage:** Dikunci aman pada 10x (menyerupai Semi-Spot).
 
-Base Margin: Ditetapkan statis sebesar $20.
+* ** Base Margin:** Ditetapkan statis sebesar $20.
 
-No Take Profit: Koin emas akan dibiarkan floating mengikuti tren naik tanpa batas TP otomatis.
+* ** No Take Profit:** Koin emas akan dibiarkan floating mengikuti tren naik tanpa batas TP otomatis.
 
-Extreme Average Down: Jika posisi floating loss menyentuh -100% ROE, bot akan otomatis melakukan DCA / Average Down dengan menyuntikkan margin yang sama ($20) secara berulang tanpa batas maksimal DCA.
+* ** Extreme Average Down:** Jika posisi floating loss menyentuh -100% ROE, bot akan otomatis melakukan DCA / Average Down dengan menyuntikkan margin yang sama ($20) secara berulang tanpa batas maksimal DCA.
 
    
 ## 🛠️ TAMBAHAN  : Cara Instalasi (Telah diuji di Replit)
