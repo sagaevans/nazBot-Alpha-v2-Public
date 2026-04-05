@@ -142,13 +142,6 @@
     </div>
 
     <div class="table-container">
-        <h3 style="margin-top:0; color:#38bdf8;">📈 Grafik Pertumbuhan Saldo Asli</h3>
-        <div class="chart-container">
-            <canvas id="balanceChart"></canvas>
-        </div>
-    </div>
-
-    <div class="table-container">
         <h3 style="margin-top:0; color:#fbbf24;">🏆 Radar Emas - Single Exposure (<span id="gold_count">0</span>/1)</h3>
         <table>
             <thead>
@@ -200,44 +193,51 @@
                 </tr>
             </thead>
             <tbody id="ledger-table">
-                <tr><td colspan="8" style="text-align:center; color:#94a3b8;">Belum ada data ledger.</td></tr>
+                <tr><td colspan="8" style="text-align:center; color:#94a3b8;">Belum ada data ledger. Menunggu TP/SL pertama...</td></tr>
             </tbody>
         </table>
+    </div>
+
+    <div class="table-container">
+        <h3 style="margin-top:0; color:#38bdf8;">📈 Visualisasi Tren Pertumbuhan Modal Asli</h3>
+        <div class="chart-container">
+            <canvas id="balanceChart"></canvas>
+        </div>
     </div>
 
     <script>
         let currentStatus = '{{ bot_status }}';
         let chartInstance = null;
-        let lastLedgerLength = 0; // Untuk mencegah grafik render ulang jika data tidak nambah
+        let lastLedgerLength = -1; // Trigger pembaruan grafik
+        let currentLiveBalance = 0; // Untuk titik nol grafik
 
-        // Inisialisasi Chart.js (BBRI Style)
+        // Inisialisasi Chart.js
         function initChart() {
             const ctx = document.getElementById('balanceChart').getContext('2d');
             chartInstance = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: [], // Waktu
+                    labels: [], 
                     datasets: [{
                         label: 'Saldo Wallet Binance (USDT)',
                         data: [],
-                        borderColor: '#0284c7', // Biru laut
-                        backgroundColor: 'rgba(2, 132, 199, 0.15)', // Biru transparan untuk area bawah garis
+                        borderColor: '#0284c7', 
+                        backgroundColor: 'rgba(2, 132, 199, 0.15)', 
                         borderWidth: 2,
                         pointBackgroundColor: '#38bdf8',
                         pointRadius: 3,
                         fill: true,
-                        tension: 0.3 // Lengkungan garis yang smooth
+                        tension: 0.3 
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: {
-                        legend: { labels: { color: '#cbd5e1' } }
-                    },
+                    plugins: { legend: { labels: { color: '#cbd5e1' } } },
                     scales: {
                         x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
                         y: { 
+                            beginAtZero: false, // FIX: Agar grafik tidak gepeng mulai dari 0
                             ticks: { color: '#94a3b8', callback: function(value) { return '$' + value; } },
                             grid: { color: '#334155' }
                         }
@@ -289,6 +289,8 @@
                 const data = await response.json();
 
                 if(data.status === 'success') {
+                    currentLiveBalance = data.balance; // Simpan untuk Titik Nol Grafik
+
                     // Update 4 Kotak Atas
                     document.getElementById('balance').innerText = '$' + data.balance.toFixed(2);
                     document.getElementById('total_equity').innerText = '$' + data.total_equity.toFixed(2);
@@ -332,7 +334,7 @@
                         else altHtml += rowHtml;
                     });
 
-                    document.getElementById('gold-table').innerHTML = goldHtml || '<tr><td colspan="7" style="text-align:center; color:#94a3b8;">Radar Emas menyala, mencari sinyal valid...</td></tr>';
+                    document.getElementById('gold-table').innerHTML = goldHtml || '<tr><td colspan="7" style="text-align:center; color:#94a3b8;">Radar Emas menyala, mencari sinyal 4 Walls valid...</td></tr>';
                     document.getElementById('vip-table').innerHTML = vipHtml || '<tr><td colspan="7" style="text-align:center; color:#94a3b8;">Tidak ada posisi VIP aktif. Mengintai market... 👀</td></tr>';
                     document.getElementById('alt-table').innerHTML = altHtml || '<tr><td colspan="7" style="text-align:center; color:#94a3b8;">Tidak ada posisi Altcoin aktif. Mengintai market... 👀</td></tr>';
                 }
@@ -344,16 +346,13 @@
                 const res = await fetch('/api/ledger');
                 const json = await res.json();
                 
+                // Jika ledger ADA isinya
                 if (json.status === 'success' && json.data.length > 0) {
                     const dataArray = json.data;
-                    
-                    // Render Tabel Ledger
                     let ledgerHtml = '';
-                    // Balikkan urutan agar yang terbaru ada di atas tabel
                     const reversedData = [...dataArray].reverse();
                     
                     reversedData.forEach(row => {
-                        // Tentukan warna berdasarkan plus minus
                         const pnlColor = row.profit_usd.includes('-') ? 'text-red' : 'text-green';
                         const roeColor = row.roe_percent.includes('-') ? 'text-red' : 'text-green';
                         const totColor = row.total_pnl.includes('-') ? 'text-red' : 'text-green';
@@ -372,30 +371,38 @@
                     });
                     document.getElementById('ledger-table').innerHTML = ledgerHtml;
 
-                    // Update Grafik HANYA jika ada data baru masuk (mencegah grafik kedip-kedip)
                     if (dataArray.length !== lastLedgerLength) {
                         lastLedgerLength = dataArray.length;
-                        
-                        // Ambil 50 data terakhir agar grafik tidak terlalu berdesakan
                         const chartData = dataArray.slice(-50); 
-                        
                         chartInstance.data.labels = chartData.map(d => d.time);
                         chartInstance.data.datasets[0].data = chartData.map(d => parseFloat(d.saldo_binance));
+                        chartInstance.update();
+                    }
+                } 
+                // JIKA LEDGER KOSONG (Belum TP pertama kali)
+                else {
+                    document.getElementById('ledger-table').innerHTML = '<tr><td colspan="8" style="text-align:center; color:#94a3b8;">Belum ada data ledger. Menunggu TP/SL pertama...</td></tr>';
+                    
+                    // Logic Titik Nol: Masukkan saldo saat ini agar grafik tidak kosong
+                    if (currentLiveBalance > 0 && lastLedgerLength !== 0) {
+                        lastLedgerLength = 0;
+                        const nowTime = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                        chartInstance.data.labels = [nowTime];
+                        chartInstance.data.datasets[0].data = [currentLiveBalance];
                         chartInstance.update();
                     }
                 }
             } catch(e) { console.error("Ledger fetching error:", e); }
         }
 
-        // Jalankan saat pertama kali buka
+        // Initialize
         initChart();
         updateToggleButton();
-        fetchDashboardData();
-        fetchLedgerData();
+        fetchDashboardData().then(() => fetchLedgerData()); // Panggil ledger setelah dapat saldo awal
 
         // Auto Refresh
-        setInterval(fetchDashboardData, 3000); // Posisi live tiap 3 detik
-        setInterval(fetchLedgerData, 5000); // Ledger & Grafik tiap 5 detik agar ringan
+        setInterval(fetchDashboardData, 3000); 
+        setInterval(fetchLedgerData, 5000); 
     </script>
 </body>
 </html>
