@@ -1,7 +1,7 @@
 # ==========================================
-# BETA v2.0 — nazBot Sniper System
+# BETA v2.0 — Sniper System
 # FILE: bot_logic.py
-# FUNGSI: Escalation Timeframe (Anti-Pingpong) & Running Total History
+# FUNGSI: Escalation Timeframe (Anti-Pingpong), 8-Column Ledger, & Gold Radar
 # ==========================================
 
 from __future__ import annotations
@@ -57,6 +57,15 @@ ALT_TF_ORDER = ['5m', '15m', '1h', '4h'] # Kasta hierarki Timeframe
 TOP_ALT_LIMIT = 50
 STATE_FILE = 'status.txt'
 
+# --- FITUR EMAS (SINGLE EXPOSURE) ---
+GOLD_PAIRS = ["XAUUSDT", "XAUTUSDT", "PAXGUSDT"]
+GOLD_SET = set(GOLD_PAIRS)
+GOLD_TFS = ['15m', '1h', '4h']
+
+# --- LEDGER SETTINGS (8 KOLOM) ---
+LEDGER_FILE = 'profit_ledger.txt'
+START_BALANCE = 5000.0 # Patokan untuk perhitungan Growth %
+
 # --- VARIABEL GLOBAL PAPAN SKOR ---
 TOTAL_CLOSED_ROE = 0.0
 TOTAL_CLOSED_ROE_PERCENT = 0.0 # Running total angka murni
@@ -64,7 +73,7 @@ TOTAL_SUCCESS_TRADES = 0
 CLOSED_HISTORY = []
 _coin_escalation_level: Dict[str, int] = {} # Buku hitam anti-pingpong
 
-_client = Client(API_KEY, API_SECRET, testnet=True)
+_client = Client(API_KEY, API_SECRET, testnet=True) # Ganti testnet=False untuk real account
 
 # ---------- PERFORMANCE CACHING ----------
 _exchange_filter_cache: Dict[str, dict] = {}
@@ -97,6 +106,69 @@ def _api_call(fn, *args, max_retries: int = 5, **kwargs):
         except Exception:
             time.sleep(2 ** attempt)
     raise RuntimeError(f"API Error: {fn.__name__}")
+
+# ========== FUNGSI LEDGER 8 KOLOM (BETA 2.0) ==========
+def get_binance_balance() -> float:
+    """Mengambil Saldo USDT Riil di Dompet Futures."""
+    try:
+        account_info = _api_call(_client.futures_account)
+        for asset in account_info.get('assets', []):
+            if asset['asset'] == 'USDT':
+                return float(asset['walletBalance'])
+    except Exception as e:
+        logger.error(f"Gagal ambil saldo riil Binance: {e}")
+    return 0.0
+
+def _fetch_realized_pnl(symbol: str) -> float:
+    """Mengambil data PnL Riil dari transaksi koin yang baru di-close."""
+    try:
+        income_data = _api_call(_client.futures_income_history, symbol=symbol, incomeType="REALIZED_PNL", limit=1)
+        if income_data:
+            return float(income_data[0]['income'])
+    except Exception:
+        pass
+    return (BASE_MARGIN * TP_TARGET_ROE) # Estimasi fallback jika API limit
+
+def get_last_ledger_totals() -> Tuple[float, float]:
+    """Membaca Akumulasi Total PnL dan ROE dari baris terakhir."""
+    if not os.path.exists(LEDGER_FILE) or os.path.getsize(LEDGER_FILE) == 0:
+        return 0.0, 0.0
+    try:
+        with open(LEDGER_FILE, 'r') as f:
+            lines = [l for l in f.readlines() if '|' in l and 'TIME' not in l and '---' not in l]
+            if not lines:
+                return 0.0, 0.0
+            last_line = lines[-1]
+            parts = [p.strip() for p in last_line.split('|')]
+            if len(parts) >= 8:
+                tot_pnl = float(parts[4].replace('$', '').replace('+', ''))
+                tot_roe = float(parts[5].replace('%', '').replace('+', ''))
+                return tot_pnl, tot_roe
+    except:
+        pass
+    return 0.0, 0.0
+
+def catat_transaksi_v2(symbol: str, pnl_usd: float, roe_percent: float):
+    """Mencatat format 8 Kolom Ledger (Running Total + Saldo Riil)."""
+    prev_tot_pnl, prev_tot_roe = get_last_ledger_totals()
+    new_tot_pnl = prev_tot_pnl + pnl_usd
+    new_tot_roe = prev_tot_roe + roe_percent
+    
+    current_balance = get_binance_balance()
+    growth_pct = ((current_balance - START_BALANCE) / START_BALANCE) * 100 if START_BALANCE > 0 else 0.0
+    
+    now = datetime.now().strftime("%H:%M:%S")
+    log_line = (f"{now} | {symbol} | {pnl_usd:+.2f} | {roe_percent:+.2f}% | "
+                f"{new_tot_pnl:+.2f} | {new_tot_roe:+.2f}% | "
+                f"{current_balance:.2f} | {growth_pct:+.2f}%\n")
+    
+    is_new = not os.path.exists(LEDGER_FILE) or os.path.getsize(LEDGER_FILE) == 0
+    with open(LEDGER_FILE, 'a') as f:
+        if is_new:
+            f.write("TIME | PAIR | PROFIT $ | ROE % | TOTAL PNL $ | TOTAL ROE % | SALDO BINANCE | GROWTH %\n")
+            f.write("-" * 110 + "\n")
+        f.write(log_line)
+    logger.info(f"💾 [LEDGER] {symbol} Terekam! Saldo: ${current_balance:.2f} (Growth: {growth_pct:+.2f}%)")
 
 def _get_exchange_filters(symbol: str) -> dict:
     if symbol not in _exchange_filter_cache:
@@ -326,25 +398,32 @@ def run_bot(stop_event: threading.Event) -> None:
                 active_keys = [f"{p['symbol']}_{p['positionSide']}" for p in pos if float(p['positionAmt']) != 0]
                 current_active_set = set(active_keys)
 
-                # --- LOGIKA SAKSI BISU & ESCALATION TIER ---
+                # --- LOGIKA SAKSI BISU, ESCALATION TIER, & PENULISAN LEDGER ---
                 if not first_run:
                     closed_keys = _previous_active_keys - current_active_set
                     for k in closed_keys:
                         symbol = k.split('_')[0]
-                        tp_val = (TP_TARGET_ROE * 100)
-                        TOTAL_CLOSED_ROE += tp_val
-                        TOTAL_CLOSED_ROE_PERCENT += tp_val
+                        
+                        # 1. Ambil PnL Riil untuk Ledger
+                        pnl_usd = _fetch_realized_pnl(symbol)
+                        roe_percent = (pnl_usd / BASE_MARGIN) * 100 # Kalkulasi persen kembalian ROE bersih
+                        
+                        # 2. Catat ke Ledger 8 Kolom
+                        catat_transaksi_v2(symbol, pnl_usd, roe_percent)
+                        
+                        # 3. Update Papan Skor Global
+                        TOTAL_CLOSED_ROE += roe_percent
+                        TOTAL_CLOSED_ROE_PERCENT += roe_percent
                         TOTAL_SUCCESS_TRADES += 1
 
-                        # ANTI-PINGPONG: Naikkan kasta Timeframe setelah TP
-                        if symbol not in VIP_SET:
+                        # 4. ANTI-PINGPONG: Naikkan kasta Timeframe setelah TP (Bukan VIP & Bukan GOLD)
+                        if symbol not in VIP_SET and symbol not in GOLD_SET:
                             curr_level = _coin_escalation_level.get(symbol, 0)
                             _coin_escalation_level[symbol] = curr_level + 1
-                            logger.info(f"📈 [ANTI-PINGPONG] {symbol} sukses TP! Naik level ke indeks TF: {_coin_escalation_level[symbol]}")
+                            logger.info(f"📈 [ANTI-PINGPONG] {symbol} selesai! Naik level ke indeks TF: {_coin_escalation_level[symbol]}")
 
                         now_str = datetime.now().strftime("%H:%M:%S")
-                        # Format history digabung dengan Running Total
-                        history_str = f"+{tp_val:.2f}% | Tot: +{TOTAL_CLOSED_ROE_PERCENT:.2f}%"
+                        history_str = f"{pnl_usd:+.2f}$ ({roe_percent:+.2f}%) | Tot: +{TOTAL_CLOSED_ROE_PERCENT:.2f}%"
                         CLOSED_HISTORY.insert(0, {'time': now_str, 'symbol': symbol, 'roe': history_str})
 
                         if len(CLOSED_HISTORY) > 20:
@@ -354,9 +433,25 @@ def run_bot(stop_event: threading.Event) -> None:
                 first_run = False
 
                 vip_count = sum(1 for k in active_keys if k.split('_')[0] in VIP_SET)
-                alt_count = sum(1 for k in active_keys if k.split('_')[0] not in VIP_SET)
+                alt_count = sum(1 for k in active_keys if k.split('_')[0] not in VIP_SET and k.split('_')[0] not in GOLD_SET)
 
-                # VIP SCAN
+                # --- RADAR EMAS (SINGLE EXPOSURE RULE) ---
+                gold_active_count = sum(1 for k in active_keys if k.split('_')[0] in GOLD_SET)
+                if gold_active_count == 0 and not _stop_event.is_set():
+                    for symbol in GOLD_PAIRS:
+                        if f"{symbol}_LONG" not in active_keys:
+                            for tf in GOLD_TFS:
+                                sig = get_adaptive_signal(symbol, tf, is_vip=True)
+                                if sig:
+                                    logger.info(f"🏆 RADAR EMAS: Sinyal {symbol} ({tf}) via {sig['reason']}")
+                                    if execute_order(symbol, 'BUY', 'LONG', BASE_MARGIN):
+                                        active_keys.append(f"{symbol}_LONG")
+                                        current_active_set.add(f"{symbol}_LONG")
+                                        _previous_active_keys = current_active_set
+                                        break # Hentikan pencarian koin emas lainnya (Single Exposure)
+                            if gold_active_count > 0: break # Mencegah loop iterasi ke gold selanjutnya jika sudah ada yg masuk
+
+                # --- VIP SCAN ---
                 for symbol in VIP_SYMBOLS:
                     if _stop_event.is_set(): break
                     if vip_count >= MAX_VIP: break
@@ -372,31 +467,27 @@ def run_bot(stop_event: threading.Event) -> None:
                                     _previous_active_keys = current_active_set
                                     break
 
-                # ALT SCAN (DENGAN ESCALATION KASTA)
+                # --- ALT SCAN (DENGAN ESCALATION KASTA) ---
                 if alt_count < MAX_ALT and not _stop_event.is_set():
                     tickers = _get_cached_ticker()
+                    # Filter: Tidak termasuk VIP_SET dan GOLD_SET
                     alts = [t['symbol'] for t in sorted(tickers, key=lambda x: float(x['quoteVolume']), reverse=True)
-                            if t['symbol'].endswith('USDT') and t['symbol'] not in VIP_SET][:TOP_ALT_LIMIT]
+                            if t['symbol'].endswith('USDT') and t['symbol'] not in VIP_SET and t['symbol'] not in GOLD_SET][:TOP_ALT_LIMIT]
 
                     futures = []
                     for s in alts:
                         if f"{s}_LONG" in active_keys: continue
 
-                        # 1. Tentukan jatah awal berdasarkan kuota
                         base_tfs = ALT_TFS_FAST if alt_count < 4 else ALT_TFS_SAFE
-
-                        # 2. Cek Buku Hitam (Escalation Level)
                         esc_level = _coin_escalation_level.get(s, 0)
 
-                        # Jika sudah mentok melewati 4h (indeks >= 4), abaikan koin ini sepenuhnya
                         if esc_level >= len(ALT_TF_ORDER):
                             continue
 
-                        # 3. Filter TF: Hanya izinkan TF yang posisinya lebih tinggi/sama dengan level eskalasi
                         valid_tfs = [tf for tf in base_tfs if ALT_TF_ORDER.index(tf) >= esc_level]
 
                         if not valid_tfs:
-                            continue # Koin ini sudah di-ban di TF kecil, dan tidak masuk kuota TF besar
+                            continue 
 
                         futures.append(executor.submit(_scan_single_alt, s, active_keys, valid_tfs))
 
@@ -414,7 +505,8 @@ def run_bot(stop_event: threading.Event) -> None:
                 # --- HEARTBEAT LOGIC ---
                 current_time = time.time()
                 if current_time - _last_heartbeat_time >= 60.0:
-                    logger.info(f"👀 System OK [BETA v2.0] | Memantau Market... (VIP: {vip_count}/{MAX_VIP} | ALT: {alt_count}/{MAX_ALT})")
+                    gold_status = "1 Aktif" if gold_active_count > 0 else "0 Aktif"
+                    logger.info(f"👀 System OK [BETA v2.0] | Market: (VIP: {vip_count}/{MAX_VIP} | ALT: {alt_count}/{MAX_ALT} | GOLD: {gold_status})")
                     _last_heartbeat_time = current_time
 
                 for _ in range(15):
