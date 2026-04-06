@@ -1,12 +1,13 @@
 # ==========================================
 # BETA v2.1 — Sniper System (RESTORED EDITION)
 # FILE: app.py
-# FUNGSI: Server Dashboard, Saldo Dinamis, & API Ledger Grafik
+# FUNGSI: Server Dashboard, Saldo Dinamis, & API Ledger Grafik + KEEP ALIVE
 # ==========================================
 
 import os
 import logging
 import tempfile
+from threading import Thread # <-- DITAMBAHKAN UNTUK KEEP ALIVE
 from flask import Flask, jsonify, request, render_template
 import bot_logic
 
@@ -191,9 +192,29 @@ def close_all_positions():
         logger.error(f"Close All Error: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
-def run_web(): 
-    """Dipanggil oleh main.py untuk menjalankan server."""
+# ==========================================
+# SISTEM KEEP ALIVE & SERVER RUNNER
+# ==========================================
+def _run_flask_app():
+    """Menjalankan server web Flask."""
     app.run(host='0.0.0.0', port=8080, use_reloader=False)
 
+def run_web(): 
+    """Dipanggil oleh main.py untuk menjalankan server di background (Keep Alive)."""
+    server_thread = Thread(target=_run_flask_app)
+    # daemon=True membuat thread ini ikut berhenti jika main.py dihentikan
+    server_thread.daemon = True 
+    server_thread.start()
+    print("🌐 Dashboard & Keep-Alive Server berjalan di port 8080...")
+
 if __name__ == '__main__': 
+    # Jika file ini dijalankan langsung (bukan diimport)
     run_web()
+    
+    # Menahan program agar tidak langsung keluar setelah thread berjalan
+    try:
+        import time
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("Server dihentikan.")
