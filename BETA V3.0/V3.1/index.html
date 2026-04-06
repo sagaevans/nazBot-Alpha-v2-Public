@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>nazBot Sniper BETA v3.1</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a; /* Slate 900 */
+            color: #e2e8f0; /* Slate 200 */
+        }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .glass-panel {
+            background-color: #1e293b; /* Slate 800 */
+            border: 1px solid #334155; /* Slate 700 */
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-6">
+
+    <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+        <div class="flex items-center gap-3">
+            <div class="p-2 bg-blue-600 rounded-lg shadow-lg shadow-blue-500/50">
+                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold text-white tracking-wide">nazBot Sniper <span class="text-blue-400">BETA v3.1</span></h1>
+                <p class="text-xs text-slate-400">Dual Mode (Long/Short) & Volume Filter Active</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <button id="toggleBotBtn" onclick="toggleBot()" class="px-5 py-2 font-bold text-sm rounded-lg transition-all duration-300 shadow-lg">
+                </button>
+            <button onclick="closeAllPositions()" class="px-5 py-2 font-bold text-sm bg-rose-600 hover:bg-rose-500 text-white rounded-lg shadow-lg shadow-rose-600/30 transition-colors">
+                ☠️ CLOSE ALL POSITIONS
+            </button>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="glass-panel p-5 text-center">
+            <p class="text-xs text-slate-400 font-semibold uppercase tracking-wider mb-2">Saldo USDT (Riil Binance)</p>
+            <h2 id="walletBalance" class="text-2xl font-mono font-bold text-white">$0.00</h2>
+        </div>
+        <div class="glass-panel p-5 text-center">
+            <p class="text-xs text-slate-400 font-semibold uppercase tracking-wider mb-2">Net Profit / ROE (Ledger)</p>
+            <h2 id="netProfit" class="text-2xl font-mono font-bold text-emerald-400">+ $0.00 (+0.00%)</h2>
+        </div>
+        <div class="glass-panel p-5 text-center">
+            <p class="text-xs text-slate-400 font-semibold uppercase tracking-wider mb-2">Floating PNL / ROE Aktif</p>
+            <h2 id="floatingPnl" class="text-2xl font-mono font-bold text-white">$0.00 (0.00%)</h2>
+        </div>
+        <div class="glass-panel p-5 text-center">
+            <p class="text-xs text-slate-400 font-semibold uppercase tracking-wider mb-2">Total Ekuitas</p>
+            <h2 id="totalEquity" class="text-2xl font-mono font-bold text-white">$0.00</h2>
+        </div>
+    </div>
+
+    <div class="space-y-6">
+        
+        <div class="glass-panel overflow-hidden">
+            <div class="bg-slate-800 border-b border-slate-700 px-5 py-3">
+                <h3 class="font-bold text-yellow-500 flex items-center gap-2">🏆 Radar Emas - PAXG Only (<span id="goldCount">0</span>/1)</h3>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead class="text-xs text-slate-400 uppercase bg-slate-900/50">
+                        <tr>
+                            <th class="px-5 py-3">Symbol</th>
+                            <th class="px-5 py-3 text-center">Side</th>
+                            <th class="px-5 py-3 text-right">Lev</th>
+                            <th class="px-5 py-3 text-right">Margin</th>
+                            <th class="px-5 py-3 text-right">Entry Price</th>
+                            <th class="px-5 py-3 text-right">Mark Price</th>
+                            <th class="px-5 py-3 text-right">ROE (%)</th>
+                            <th class="px-5 py-3 text-right">Unrealized ($)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="goldTable" class="divide-y divide-slate-700/50">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="glass-panel overflow-hidden">
+            <div class="bg-slate-800 border-b border-slate-700 px-5 py-3">
+                <h3 class="font-bold text-purple-400 flex items-center gap-2">👑 VIP Positions (<span id="vipCount">0</span>/8)</h3>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead class="text-xs text-slate-400 uppercase bg-slate-900/50">
+                        <tr>
+                            <th class="px-5 py-3">Symbol</th>
+                            <th class="px-5 py-3 text-center">Side</th>
+                            <th class="px-5 py-3 text-right">Lev</th>
+                            <th class="px-5 py-3 text-right">Margin</th>
+                            <th class="px-5 py-3 text-right">Entry Price</th>
+                            <th class="px-5 py-3 text-right">Mark Price</th>
+                            <th class="px-5 py-3 text-right">ROE (%)</th>
+                            <th class="px-5 py-3 text-right">Unrealized ($)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="vipTable" class="divide-y divide-slate-700/50">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="glass-panel overflow-hidden">
+            <div class="bg-slate-800 border-b border-slate-700 px-5 py-3">
+                <h3 class="font-bold text-pink-400 flex items-center gap-2">🚀 Altcoin Positions (<span id="altCount">0</span>/8)</h3>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead class="text-xs text-slate-400 uppercase bg-slate-900/50">
+                        <tr>
+                            <th class="px-5 py-3">Symbol</th>
+                            <th class="px-5 py-3 text-center">Side</th>
+                            <th class="px-5 py-3 text-right">Lev</th>
+                            <th class="px-5 py-3 text-right">Margin</th>
+                            <th class="px-5 py-3 text-right">Entry Price</th>
+                            <th class="px-5 py-3 text-right">Mark Price</th>
+                            <th class="px-5 py-3 text-right">ROE (%)</th>
+                            <th class="px-5 py-3 text-right">Unrealized ($)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="altTable" class="divide-y divide-slate-700/50">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="glass-panel overflow-hidden">
+            <div class="bg-slate-800 border-b border-slate-700 px-5 py-3">
+                <h3 class="font-bold text-emerald-400 flex items-center gap-2">📗 Buku Jurnal & Ledger Pertumbuhan (v3.1)</h3>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead class="text-xs text-slate-400 uppercase bg-slate-900/50">
+                        <tr>
+                            <th class="px-5 py-3">Waktu</th>
+                            <th class="px-5 py-3">Pair / Koin</th>
+                            <th class="px-5 py-3 text-right">Profit ($)</th>
+                            <th class="px-5 py-3 text-right">ROE (%)</th>
+                            <th class="px-5 py-3 text-right">Tot PNL ($)</th>
+                            <th class="px-5 py-3 text-right">Tot ROE (%)</th>
+                            <th class="px-5 py-3 text-right">Saldo Asli ($)</th>
+                            <th class="px-5 py-3 text-right">Growth (%)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ledgerTable" class="divide-y divide-slate-700/50">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // Helper: Format Warna Uang
+        function formatColor(val, isPercentage = false, prefix = '') {
+            let num = parseFloat(val);
+            if (isNaN(num)) return val;
+            let strVal = Math.abs(num).toFixed(2) + (isPercentage ? '%' : '');
+            if (num > 0) return `<span class="text-emerald-400">+${prefix}${strVal}</span>`;
+            if (num < 0) return `<span class="text-rose-400">-${prefix}${strVal}</span>`;
+            return `<span class="text-slate-400">${prefix}${strVal}</span>`;
+        }
+
+        // Helper: Format Side Badge (LONG/SHORT)
+        function formatSide(side) {
+            if (side === 'LONG') {
+                return `<span class="px-2 py-1 bg-emerald-900/50 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold rounded uppercase tracking-widest">LONG</span>`;
+            } else if (side === 'SHORT') {
+                return `<span class="px-2 py-1 bg-rose-900/50 border border-rose-500/30 text-rose-400 text-[10px] font-bold rounded uppercase tracking-widest">SHORT</span>`;
+            }
+            return `<span class="px-2 py-1 bg-slate-700 text-slate-300 text-xs font-bold rounded uppercase">${side}</span>`;
+        }
+
+        // Render Baris Tabel Posisi
+        function renderTableRows(tableId, dataList, emptyMsg) {
+            const tbody = document.getElementById(tableId);
+            if (!dataList || dataList.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" class="px-5 py-4 text-center text-slate-500 italic">${emptyMsg}</td></tr>`;
+                return;
+            }
+            let html = '';
+            dataList.forEach(p => {
+                html += `
+                    <tr class="hover:bg-slate-800/50 transition-colors">
+                        <td class="px-5 py-3 font-bold text-slate-200">${p.symbol}</td>
+                        <td class="px-5 py-3 text-center">${formatSide(p.side)}</td>
+                        <td class="px-5 py-3 text-right text-slate-400">${p.leverage}x</td>
+                        <td class="px-5 py-3 text-right font-mono">$${parseFloat(p.margin).toFixed(2)}</td>
+                        <td class="px-5 py-3 text-right font-mono text-slate-400">${parseFloat(p.entry_price).toPrecision(6)}</td>
+                        <td class="px-5 py-3 text-right font-mono text-slate-400">${parseFloat(p.mark_price).toPrecision(6)}</td>
+                        <td class="px-5 py-3 text-right font-mono font-bold">${formatColor(p.roe, true)}</td>
+                        <td class="px-5 py-3 text-right font-mono font-bold">${formatColor(p.unrealized, false, '$')}</td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+        }
+
+        // Render Baris Tabel Ledger
+        function renderLedger(dataList) {
+            const tbody = document.getElementById('ledgerTable');
+            if (!dataList || dataList.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" class="px-5 py-4 text-center text-slate-500 italic">Belum ada transaksi tercatat...</td></tr>`;
+                return;
+            }
+            let html = '';
+            dataList.forEach(row => {
+                html += `
+                    <tr class="hover:bg-slate-800/50 transition-colors">
+                        <td class="px-5 py-3 text-slate-400">${row.time}</td>
+                        <td class="px-5 py-3 font-bold text-slate-200">${row.symbol}</td>
+                        <td class="px-5 py-3 text-right font-mono">${formatColor(row.profit.replace(/[+$]/g,''), false, '$')}</td>
+                        <td class="px-5 py-3 text-right font-mono">${formatColor(row.roe.replace(/[+%]/g,''), true)}</td>
+                        <td class="px-5 py-3 text-right font-mono">${formatColor(row.tot_pnl.replace(/[+$]/g,''), false, '$')}</td>
+                        <td class="px-5 py-3 text-right font-mono">${formatColor(row.tot_roe.replace(/[+%]/g,''), true)}</td>
+                        <td class="px-5 py-3 text-right font-mono text-blue-400 font-bold">$${parseFloat(row.saldo).toFixed(2)}</td>
+                        <td class="px-5 py-3 text-right font-mono font-bold">${formatColor(row.growth.replace(/[+%]/g,''), true)}</td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+        }
+
+        // Fetch Data Utama (Dipanggil setiap 2 detik)
+        async function updateDashboard() {
+            try {
+                const res = await fetch('/api/data');
+                const data = await res.json();
+                if (data.status === 'success') {
+                    
+                    // Update Button Status
+                    const btn = document.getElementById('toggleBotBtn');
+                    if (data.bot_status === 'ON') {
+                        btn.innerHTML = '🟢 BOT IS RUNNING (CLICK TO STOP)';
+                        btn.className = "px-5 py-2 font-bold text-sm bg-emerald-900 border border-emerald-500 text-emerald-400 hover:bg-emerald-800 rounded-lg shadow-lg shadow-emerald-900/50 transition-all";
+                    } else {
+                        btn.innerHTML = '🔴 BOT IS STOPPED (CLICK TO START)';
+                        btn.className = "px-5 py-2 font-bold text-sm bg-slate-800 border border-slate-600 text-slate-400 hover:bg-slate-700 rounded-lg shadow-lg transition-all";
+                    }
+
+                    // Update Cards
+                    document.getElementById('walletBalance').innerText = '$' + parseFloat(data.wallet_balance).toFixed(2);
+                    document.getElementById('totalEquity').innerText = '$' + parseFloat(data.equity).toFixed(2);
+                    
+                    // Floating
+                    const floatingStr = formatColor(data.total_unrealized, false, '$') + ' (' + formatColor(data.total_active_roe, true) + ')';
+                    document.getElementById('floatingPnl').innerHTML = floatingStr;
+
+                    // Ledger Net
+                    const netStr = formatColor(data.net_profit.replace(/[+$]/g,''), false, '$') + ' (' + formatColor(data.net_roe.replace(/[+%]/g,''), true) + ')';
+                    document.getElementById('netProfit').innerHTML = netStr;
+
+                    // Update Counters
+                    document.getElementById('goldCount').innerText = data.gold_positions.length;
+                    document.getElementById('vipCount').innerText = data.vip_positions.length;
+                    document.getElementById('altCount').innerText = data.alt_positions.length;
+
+                    // Update Tables
+                    renderTableRows('goldTable', data.gold_positions, 'Radar Emas mengintai, mencari sinyal volume valid... 🕵️‍♂️');
+                    renderTableRows('vipTable', data.vip_positions, 'Tidak ada posisi VIP aktif. Menunggu momen Sniper... 🎯');
+                    renderTableRows('altTable', data.alt_positions, 'Tidak ada posisi Altcoin aktif. Menunggu momen Sniper... 🎯');
+                    renderLedger(data.ledger);
+                }
+            } catch (err) {
+                console.error("Dashboard update failed:", err);
+            }
+        }
+
+        // Action: Toggle Bot
+        async function toggleBot() {
+            try {
+                await fetch('/api/toggle', { method: 'POST' });
+                updateDashboard();
+            } catch (err) {
+                alert("Gagal mengubah status bot.");
+            }
+        }
+
+        // Action: Close All Positions (Dengan SweetAlert Konfirmasi)
+        function closeAllPositions() {
+            Swal.fire({
+                title: 'Panic Close All?',
+                text: "Bot akan dimatikan otomatis, semua Limit TP/SL akan dibatalkan, dan semua posisi (Long & Short) akan di-Market Close. Yakin Bos?",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#e11d48',
+                cancelButtonColor: '#475569',
+                confirmButtonText: 'Ya, Sikat Habis!',
+                cancelButtonText: 'Batal',
+                background: '#1e293b',
+                color: '#f8fafc'
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({
+                        title: 'Mengeksekusi...',
+                        text: 'Membatalkan order dan menutup posisi...',
+                        background: '#1e293b',
+                        color: '#f8fafc',
+                        allowOutsideClick: false,
+                        didOpen: () => { Swal.showLoading() }
+                    });
+                    
+                    try {
+                        const res = await fetch('/api/close_all', { method: 'POST' });
+                        const data = await res.json();
+                        if(data.status === 'success') {
+                            Swal.fire({
+                                title: 'Cleaned!',
+                                text: data.message,
+                                icon: 'success',
+                                background: '#1e293b',
+                                color: '#f8fafc'
+                            });
+                            updateDashboard();
+                        } else {
+                            Swal.fire('Error', data.message, 'error');
+                        }
+                    } catch (err) {
+                        Swal.fire('Error', 'Gagal memanggil API.', 'error');
+                    }
+                }
+            })
+        }
+
+        // Loop Refresh Tiap 2 Detik
+        setInterval(updateDashboard, 2000);
+        updateDashboard(); // First run
+    </script>
+</body>
+</html>
