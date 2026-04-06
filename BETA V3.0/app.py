@@ -1,7 +1,7 @@
 # ==========================================
-# BETA v2.0 — Sniper System
+# BETA v2.1 — Sniper System (RESTORED EDITION)
 # FILE: app.py
-# FUNGSI: Server Dashboard, Akumulasi ROE, & API Ledger Grafik
+# FUNGSI: Server Dashboard, Saldo Dinamis, & API Ledger Grafik
 # ==========================================
 
 import os
@@ -11,18 +11,13 @@ from flask import Flask, jsonify, request, render_template
 import bot_logic
 
 # --- SILENCER: MEMBERSIHKAN CONSOLE ---
-# Mematikan log standar Flask (Werkzeug) agar tidak nyampah di layar tiap 3 detik
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
-
-# Mematikan log library pihak ketiga (urllib3/binance)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("binance").setLevel(logging.WARNING)
 
 app = Flask(__name__)
 logger = logging.getLogger('dashboard')
-
-INITIAL_BALANCE = 5000.0
 
 def _atomic_write(filepath, content):
     """Menulis file status dengan aman agar tidak crash saat diakses bot."""
@@ -39,33 +34,29 @@ def index():
             status = f.read().strip() or "OFF"
     except: 
         status = "OFF"
-
-    # render_template otomatis mencari di folder 'templates'
     return render_template('index.html', bot_status=status)
 
 @app.route('/api/data')
 def get_data():
     """Endpoint utama Dashboard. Mengolah data dari Binance dan bot_logic."""
     try:
-        # 1. Ambil data Saldo USDT via bot_logic (aman dari rate limit)
-        balances = bot_logic._api_call(bot_logic._client.futures_account_balance)
-        usdt_balance = next((float(b['balance']) for b in balances if b['asset'] == 'USDT'), 0.0)
+        # 1. Ambil data Saldo USDT dan Saldo Awal secara Dinamis (v2.1)
+        usdt_balance = bot_logic.get_binance_balance()
+        initial_balance = bot_logic.get_initial_balance()
 
         acc = bot_logic._api_call(bot_logic._client.futures_account)
         total_unrealized = float(acc['totalUnrealizedProfit'])
 
         # 2. Perhitungan Standar Akun
-        net_profit = usdt_balance - INITIAL_BALANCE
-        net_roi = (net_profit / INITIAL_BALANCE) * 100
-        floating_roe = (total_unrealized / INITIAL_BALANCE) * 100
+        net_profit = usdt_balance - initial_balance
+        net_roi = (net_profit / initial_balance * 100) if initial_balance > 0 else 0.0
+        floating_roe = (total_unrealized / initial_balance * 100) if initial_balance > 0 else 0.0
         total_equity = usdt_balance + total_unrealized
 
-        # 3. Proses Posisi Aktif & Hitung Akumulasi ROE Margin Murni
+        # 3. Proses Posisi Aktif
         positions = bot_logic._api_call(bot_logic._client.futures_position_information)
         active_pos = []
         vip_c = alt_c = gold_c = 0
-
-        # Variabel Penjumlahan Murni ROE (Request Bos)
         accumulative_roe_margin = 0.0
 
         for p in positions:
@@ -80,14 +71,12 @@ def get_data():
                 # Hitung ROE Murni terhadap Margin Aktual
                 margin = (abs(amt) * mark_price) / leverage
                 roe = (unrealized / margin * 100) if margin > 0 else 0
-
-                # Tambahkan ke total akumulasi ROE murni
                 accumulative_roe_margin += roe
 
                 # Identifikasi Label Koin
                 is_vip = symbol in bot_logic.VIP_SET
                 is_gold = symbol in bot_logic.GOLD_SET
-                
+
                 if is_gold:
                     type_label = "GOLD"
                     gold_c += 1
@@ -122,10 +111,10 @@ def get_data():
             "vip_count": vip_c, 
             "alt_count": alt_c,
             "gold_count": gold_c,
-
-            # --- DATA PAPAN SKOR BARU (Dari bot_logic.py) ---
             "accumulative_roe_margin": accumulative_roe_margin,
-            "total_closed_roe": bot_logic.TOTAL_CLOSED_ROE,
+
+            # FIXED: Mengambil ROE Akumulatif Excel Style dari bot_logic v2.1
+            "total_closed_roe": bot_logic.get_last_ledger_totals(), 
             "total_success_trades": bot_logic.TOTAL_SUCCESS_TRADES,
             "closed_history": bot_logic.CLOSED_HISTORY
         })
@@ -134,28 +123,26 @@ def get_data():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # ==========================================
-# ENDPOINT BARU: JALUR DATA GRAFIK (LEDGER 8 KOLOM)
+# ENDPOINT JALUR DATA GRAFIK (LEDGER 8 KOLOM) - DIKEMBALIKAN!
 # ==========================================
 @app.route('/api/ledger')
 def get_ledger_data():
-    """Membaca file profit_ledger.txt dan mengirimkannya ke grafik frontend."""
+    """Membaca file profit_ledger.txt dan mengirimkannya ke frontend."""
     ledger_data = []
-    
+
     if not os.path.exists(bot_logic.LEDGER_FILE):
         return jsonify({"status": "success", "data": []})
 
     try:
         with open(bot_logic.LEDGER_FILE, 'r') as f:
             lines = f.readlines()
-            
+
         for line in lines:
-            # Abaikan baris header atau garis pemisah
             if not line.strip() or 'TIME' in line or '---' in line:
                 continue
-                
+
             parts = [p.strip() for p in line.split('|')]
-            
-            # Format: TIME | PAIR | PROFIT$ | ROE% | TOT_PNL | TOT_ROE | BALANCE | GROWTH%
+
             if len(parts) >= 8:
                 ledger_data.append({
                     "time": parts[0],
@@ -167,7 +154,7 @@ def get_ledger_data():
                     "saldo_binance": parts[6],
                     "growth": parts[7]
                 })
-                
+
         return jsonify({"status": "success", "data": ledger_data})
     except Exception as e:
         logger.error(f"Gagal membaca ledger API: {e}")
@@ -180,6 +167,9 @@ def toggle_bot():
     _atomic_write(bot_logic.STATE_FILE, new_status)
     return jsonify({"status": "success", "bot_status": new_status})
 
+# ==========================================
+# TOMBOL PANIK CLOSE ALL - DIKEMBALIKAN!
+# ==========================================
 @app.route('/api/close_all', methods=['POST'])
 def close_all_positions():
     """Fungsi Tombol Panik (Close All)"""
@@ -203,7 +193,6 @@ def close_all_positions():
 
 def run_web(): 
     """Dipanggil oleh main.py untuk menjalankan server."""
-    # use_reloader=False sangat penting agar bot tidak berjalan ganda di Replit
     app.run(host='0.0.0.0', port=8080, use_reloader=False)
 
 if __name__ == '__main__': 
