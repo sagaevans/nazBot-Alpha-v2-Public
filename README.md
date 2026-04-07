@@ -1,79 +1,103 @@
-# 🎯 nazBot Sniper System [BETA v3.0]
-**Automated Binance Futures Trading Bot & Web Dashboard**
+# nazBot Sniper — BETA v4.0
 
-nazBot Sniper System adalah bot trading *crypto futures* otomatis yang dirancang untuk platform Binance (Testnet/Mainnet). Membawa filosofi "Sniper" (Sabar Menunggu, Tembak Presisi), bot ini dilengkapi dengan berbagai filter teknikal tingkat lanjut, manajemen risiko otomatis (DCA), dan sebuah Web Dashboard interaktif.
-
-Versi **BETA v3.0** membawa pembaruan masif pada stabilitas order (Anti-Slippage), manajemen koin (Anti-Pingpong), dan keakuratan pencatatan Ledger berbasis Saldo Riil.
+Binance Futures Trading Bot + Web Dashboard  
+**50× Leverage · $5 Base Margin · 100% ROE TP · -150% ROE SL (Short)**
 
 ---
 
-## ✨ Fitur Utama (v3.0)
+## Architecture
 
-### 1. 🛡️ Limit Order Take Profit (Anti-Slippage)
-Bot sekarang menggunakan murni pesanan **LIMIT** untuk *Take Profit*. Begitu bot melakukan *entry* (Market Order), bot akan otomatis memasang jaring *Take Profit* di buku antrean (*Order Book*) tepat pada target **100% ROE**. Ini mengeliminasi risiko *slippage* atau rugi karena *spread* kosong, khususnya di Testnet.
-
-### 2. 📡 Sniper Strategy & 4 Walls Protection
-Sinyal *entry* tidak dilakukan secara asal. Bot menganalisa *Price Action* dan indikator teknikal:
-- **Trend Alignment:** Wajib berada di atas EMA 200 (TF 15m) untuk memastikan arah tren positif.
-- **Dynamic Supports:** Mencari pantulan dari garis EMA 200, MA 99, atau Lower Bollinger Bands.
-- **RSI Filter & Volume Spike:** Menghindari pembelian pucuk (*Overbought*) dan mencegah *entry* saat terjadi *Panic Selling/Buying* (Volume Spike Filter).
-- **Shadow/Pinbar Confirmation:** Menuntut adanya ekor bawah (*shadow*) sebagai konfirmasi pantulan harga.
-
-### 3. 💉 3-Stage Dynamic DCA (Martingale)
-Sistem penyelamatan posisi (*Recovery*) yang rapi jika harga berbalik arah setelah *entry*:
-- **Tahap 1:** Drop 2% ROE -> Suntik Margin 0.5x
-- **Tahap 2:** Drop 3% ROE -> Suntik Margin 0.5x
-- **Tahap 3:** Drop 4% ROE -> Suntik Margin 1.0x (Last Stand)
-
-### 4. 📈 Sistem Escalation (Anti-Pingpong)
-Mencegah bot melakukan *spam order* pada koin yang sama. Jika bot baru saja *Take Profit* dari koin `ALT`, koin tersebut akan dinaikkan level *Timeframe*-nya (misal dari 5m ke 15m) untuk pencarian sinyal berikutnya.
-
-### 5. 🏆 Gold Radar (Single Exposure)
-Berburu khusus untuk koin bernilai emas fisik (`PAXGUSDT`). Dibatasi ketat hanya untuk 1 posisi aktif (*Single Exposure*) guna mencegah penumpukan margin pada satu jenis aset, serta diatur menggunakan Leverage khusus (10x).
-
-### 6. 🌐 Terintegrasi Web Dashboard & Keep-Alive
-Aplikasi ini sudah membungkus *Bot Engine* (Background Thread) dan *Web Server Flask* (Main Thread) ke dalam satu wadah. Dashboard menampilkan:
-- Saldo Riil USDT Binance.
-- Posisi terbuka secara *real-time* (Roe, PnL, Tipe Koin).
-- **8-Column Dynamic Ledger:** Mencatat rekam jejak profit, akumulasi PnL, dan persentase pertumbuhan modal (*Growth %*).
-- Flask Web Server sekaligus bertindak sebagai sasaran "Ping" untuk layanan pihak ketiga (seperti UptimeRobot) agar bot berjalan 24/7.
+```
+nazbot/
+├── main.py            ← Entry point: starts Flask + Bot Engine
+├── app.py             ← Flask API server (dashboard endpoints)
+├── bot_logic.py       ← Trading engine (5-layer confluence)
+├── templates/
+│   └── index.html     ← Web dashboard (dark theme, 8-col ledger, Chart.js)
+├── requirements.txt   ← Python dependencies
+├── profit_ledger.txt  ← 8-column trade ledger (auto-created)
+├── status.txt         ← Bot ON/OFF state
+└── start_balance.txt  ← Baseline balance for growth% calculation
+```
 
 ---
 
-## 📂 Struktur File
+## Quick Start (Replit / Linux Server)
 
-- `main.py` : Pusat komando utama. Menjalankan *Flask server* dan menembak *Bot logic* ke *background thread*.
-- `app.py` : File web server (API Endpoint, Rute Halaman, dan Kalkulasi Tampilan Dashboard).
-- `bot_logic.py` : Otak dari sistem trading (Algoritma Sinyal, Order Binance, Ledger, dan DCA).
-- `templates/index.html` : Antarmuka visual Dashboard (UI/UX).
-- `status.txt` : File sakelar (ON/OFF) yang menghubungkan tombol Dashboard dengan memori Bot.
-- `profit_ledger.txt` : *Buku Jurnal* otomatis yang mencatat semua transaksi sukses.
+### 1. Install dependencies
+```bash
+pip install -r requirements.txt
+```
 
----
+### 2. Set environment variables (Replit Secrets / .env)
+```
+BINANCE_API_KEY=your_key_here
+BINANCE_API_SECRET=your_secret_here
+```
 
-## ⚙️ Persyaratan Sistem & Instalasi
+### 3. Choose Testnet or Live
+In **bot_logic.py** and **app.py**, change:
+```python
+# Testnet (safe):
+_client = Client(API_KEY, API_SECRET, testnet=True)
 
-### Prasyarat:
-- Python 3.8+
-- Akun Binance (dengan fitur Futures & API Key yang sudah diaktifkan)
-- *Library* yang dibutuhkan: `pandas`, `ta`, `python-binance`, `flask`
+# Live account:
+_client = Client(API_KEY, API_SECRET, testnet=False)
+```
 
-### Cara Menjalankan:
-1. Simpan *API Key* dan *Secret Key* Binance kamu ke dalam *Environment Variables* (*Secrets* di Replit):
-   - `BINANCE_API_KEY` = *<Kunci_API_Kamu>*
-   - `BINANCE_API_SECRET` = *<Kunci_Rahasia_Kamu>*
-2. Buka terminal dan instal *library* (jika belum):
-   ```bash
-   pip install pandas ta python-binance flask
-   
-## 🛠️ TAMBAHAN  : Cara Instalasi (Telah diuji di Replit)
-
-1.  **Environment:** Pastikan Python 3.10+ terinstal.
-2.  **API Keys:** Masukkan `BINANCE_API_KEY` dan `BINANCE_API_SECRET` ke dalam *Secrets* Replit atau file `.env`.
-3.  **Requirements:** Jalankan `pip install -r requirements.txt` (Pastikan `pandas`, `numpy`, `ta`, `python-binance`, dan `flask` tercantum).
-4.  **Run:** Jalankan `python main.py` dan akses dashboard di port 8080.
+### 4. Run
+```bash
+python main.py
+```
+Dashboard opens at: **http://localhost:8080**
 
 ---
 
-## ⚠️ Disclaimer
-*Trading Futures memiliki risiko tinggi. nazBot Alpha 4.0 adalah alat bantu teknis. Pengguna bertanggung jawab penuh atas konfigurasi leverage dan margin yang digunakan. Sangat disarankan untuk melakukan uji coba secara menyeluruh di Testnet Binance sebelum digunakan di akun Real.*
+## Core Bot Rules
+
+| Rule | Value |
+|------|-------|
+| Leverage | 50× (hard-coded) |
+| Base Margin | $5 per entry |
+| Take Profit | 100% ROE — instant LIMIT order |
+| Long Stop Loss | None — 3-Stage DCA handles drawdown |
+| Short Stop Loss | -150% ROE — STOP_MARKET |
+| Gold Slot | 1 × PAXGUSDT |
+| VIP Slots | 8 × (BTC ETH SOL BNB ADA DOT XRP ALICE) |
+| Alt Slots | 8 × (4 Aggressive 5m + 4 Safe 15m) |
+
+---
+
+## 5-Layer Confluence Engine (v4.0)
+
+| Layer | Indicator | Purpose |
+|-------|-----------|---------|
+| 1 | EMA 200 (15m) | Macro trend alignment |
+| 2 | MA 99 + Bollinger Bands | Dynamic walls (support/resistance) |
+| 3 | Volume MA × 1.5 | Volume spike confirmation |
+| 4 | Static Swing S/R (50 bars) | Key price level proximity |
+| 5 | Pinbar / Rejection Candle | Price action quality filter |
+
+**LONG** = Bullish pinbar bouncing off support + volume spike  
+**SHORT** = Bearish pinbar rejected from resistance + volume spike
+
+---
+
+## Profit Ledger Format
+
+```
+TIME | PAIR | PROFIT $ | ROE % | TOTAL PNL $ | TOTAL ROE % | SALDO BINANCE | GROWTH %
+```
+
+---
+
+## Dashboard Endpoints
+
+| Route | Method | Purpose |
+|-------|--------|---------|
+| `/` | GET | Web dashboard |
+| `/api/data` | GET | Positions + ledger + balances |
+| `/api/ledger_chart` | GET | Time-series for growth chart |
+| `/api/toggle` | POST | Start / Stop bot |
+| `/api/close_all` | POST | Emergency panic close |
+| `/api/status` | GET | Bot ON/OFF state |
