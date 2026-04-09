@@ -58,9 +58,4 @@ Karena bot ini beroperasi di cloud (seperti Replit), server bisa "tertidur" jika
 
 📜 Disclaimer
 Cryptocurrency futures trading carries a high level of risk and may not be suitable for all investors. This bot is provided "as is" for educational and experimental purposes. The creator is not responsible for any financial losses incurred while using this software.
-   * `BINANCE_API_SECRET` = *Your_API_Secret*
-
-3. **Install Dependencies:**
-   Jalankan perintah ini di console/terminal:
-   ```bash
-   pip install pandas ta python-binance flask
+ 
