@@ -63,6 +63,6 @@ Antarmuka UI/UX modern bergaya *Glassmorphism* untuk memantau performa bot secar
 Karena bot ini beroperasi di cloud (seperti Replit), server bisa "tertidur" jika tidak ada aktivitas. SANGAT DISARANKAN untuk menyambungkan URL Webview Dashboard bot ini ke layanan pemantau seperti UptimeRobot atau Cron-job.org (Ping setiap 5 menit) agar bot tetap "melek" 24/7 dan tidak ketinggalan momen DCA.
 ---
 
-📜 Disclaimer
+## 📜 Disclaimer
 Cryptocurrency futures trading carries a high level of risk and may not be suitable for all investors. This bot is provided "as is" for educational and experimental purposes. The creator is not responsible for any financial losses incurred while using this software.
  
