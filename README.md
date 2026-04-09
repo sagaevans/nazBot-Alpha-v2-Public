@@ -52,6 +52,12 @@ Antarmuka UI/UX modern bergaya *Glassmorphism* untuk memantau performa bot secar
 2. **Environment Variables (Rahasia API):**
    Masukkan API Key Binance kamu di bagian *Secrets* (Replit) atau `.env` file:
    * `BINANCE_API_KEY` = *Your_API_Key*
+   * `BINANCE_API_SECRET` = *Your_API_Secret*
+
+3. **Install Dependencies:**
+   Jalankan perintah ini di console/terminal:
+   ```bash
+   pip install pandas ta python-binance flask
   
 ## ⚠️ Peringatan Penting (Keep Alive)
 Karena bot ini beroperasi di cloud (seperti Replit), server bisa "tertidur" jika tidak ada aktivitas. SANGAT DISARANKAN untuk menyambungkan URL Webview Dashboard bot ini ke layanan pemantau seperti UptimeRobot atau Cron-job.org (Ping setiap 5 menit) agar bot tetap "melek" 24/7 dan tidak ketinggalan momen DCA.
