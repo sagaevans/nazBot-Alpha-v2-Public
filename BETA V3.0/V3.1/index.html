@@ -7,6 +7,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap');
         body {
@@ -42,8 +44,7 @@
         </div>
 
         <div class="flex items-center gap-3">
-            <button id="toggleBotBtn" onclick="toggleBot()" class="px-6 py-2 font-bold text-sm rounded-lg transition-all duration-300 shadow-lg">
-                </button>
+            <button id="toggleBotBtn" onclick="toggleBot()" class="px-6 py-2 font-bold text-sm rounded-lg transition-all duration-300 shadow-lg"></button>
             <button onclick="closeAllPositions()" class="px-5 py-2 font-bold text-sm bg-rose-600 hover:bg-rose-500 text-white rounded-lg shadow-lg shadow-rose-600/30 transition-colors">
                 ☠️ CLOSE ALL
             </button>
@@ -70,7 +71,7 @@
     </div>
 
     <div class="space-y-6">
-        
+
         <div class="glass-panel overflow-hidden">
             <div class="bg-slate-800 border-b border-slate-700 px-5 py-3">
                 <h3 class="font-bold text-yellow-500 flex items-center gap-2">🏆 Radar Emas - PAXG Only (<span id="goldCount">0</span>/1)</h3>
@@ -140,13 +141,23 @@
             </div>
         </div>
 
-        <div class="glass-panel overflow-hidden">
-            <div class="bg-slate-800 border-b border-slate-700 px-5 py-3">
+        <div id="exportTarget" class="glass-panel overflow-hidden">
+            <div class="bg-slate-800 border-b border-slate-700 px-5 py-3 flex justify-between items-center">
                 <h3 class="font-bold text-emerald-400 flex items-center gap-2">📗 Buku Jurnal & Ledger Pertumbuhan</h3>
+
+                <div class="flex gap-2">
+                    <button onclick="exportExcel()" class="px-4 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded shadow-lg shadow-emerald-600/30 transition-colors">
+                        📊 EXCEL
+                    </button>
+                    <button onclick="exportVisual()" class="px-4 py-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded shadow-lg shadow-indigo-600/30 transition-colors">
+                        📸 VISUAL
+                    </button>
+                </div>
             </div>
-            <div class="overflow-x-auto">
-                <table class="w-full text-left text-sm">
-                    <thead class="text-xs text-slate-400 uppercase bg-slate-900/50">
+
+            <div class="overflow-x-auto bg-[#0f172a]"> 
+                <table id="datatable_ledger" class="w-full text-left text-sm">
+                    <thead class="text-xs text-slate-400 uppercase bg-slate-800">
                         <tr>
                             <th class="px-5 py-3">Waktu</th>
                             <th class="px-5 py-3">Pair / Koin</th>
@@ -161,13 +172,11 @@
                     <tbody id="ledgerTable" class="divide-y divide-slate-700/50"></tbody>
                 </table>
             </div>
-        </div>
 
-        <div class="glass-panel overflow-hidden">
-            <div class="bg-slate-800 border-b border-slate-700 px-5 py-3">
-                <h3 class="font-bold text-blue-400 flex items-center gap-2">📊 Visualisasi Tren Pertumbuhan Modal</h3>
+            <div class="bg-slate-800 border-t border-slate-700 px-5 py-3">
+                <h3 class="font-bold text-blue-400 flex items-center gap-2 text-sm">📊 Visualisasi Tren Pertumbuhan Modal</h3>
             </div>
-            <div class="p-5" style="height: 300px;">
+            <div class="p-5 bg-[#0f172a]" style="height: 300px;">
                 <canvas id="growthChart"></canvas>
             </div>
         </div>
@@ -175,7 +184,6 @@
     </div>
 
     <script>
-        // Init Chart.js
         let growthChart;
         function updateChart(ledgerData) {
             const ctx = document.getElementById('growthChart').getContext('2d');
@@ -216,7 +224,6 @@
             }
         }
 
-        // Helper: Format Warna Uang
         function formatColor(val, isPercentage = false, prefix = '') {
             let num = parseFloat(val);
             if (isNaN(num)) return val;
@@ -226,7 +233,6 @@
             return `<span class="text-slate-400">${prefix}${strVal}</span>`;
         }
 
-        // Helper: Format Side Badge (LONG/SHORT)
         function formatSide(side) {
             if (side === 'LONG') {
                 return `<span class="px-2 py-1 bg-emerald-900/50 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold rounded uppercase tracking-widest">LONG</span>`;
@@ -236,7 +242,6 @@
             return `<span class="px-2 py-1 bg-slate-700 text-slate-300 text-xs font-bold rounded uppercase">${side}</span>`;
         }
 
-        // Render Baris Tabel Posisi
         function renderTableRows(tableId, dataList, emptyMsg) {
             const tbody = document.getElementById(tableId);
             if (!dataList || dataList.length === 0) {
@@ -261,7 +266,6 @@
             tbody.innerHTML = html;
         }
 
-        // Render Baris Tabel Ledger
         function renderLedger(dataList) {
             const tbody = document.getElementById('ledgerTable');
             if (!dataList || dataList.length === 0) {
@@ -270,6 +274,8 @@
             }
             let html = '';
             dataList.forEach(row => {
+                // Di sini kita hapus format HTML color di dalam data yang akan di-grab Excel,
+                // Tapi untuk tampilan UI tetap dikasih warna.
                 html += `
                     <tr class="hover:bg-slate-800/50 transition-colors border-t border-slate-700/50">
                         <td class="px-5 py-3 text-slate-400">${row.time}</td>
@@ -286,14 +292,11 @@
             tbody.innerHTML = html;
         }
 
-        // Fetch Data Utama
         async function updateDashboard() {
             try {
                 const res = await fetch('/api/data');
                 const data = await res.json();
                 if (data.status === 'success') {
-                    
-                    // Update Button Status (Simple Mode)
                     const btn = document.getElementById('toggleBotBtn');
                     if (data.bot_status === 'ON') {
                         btn.innerHTML = 'STOP BOT';
@@ -303,26 +306,23 @@
                         btn.className = "px-6 py-2 font-bold text-sm bg-emerald-600 text-white hover:bg-emerald-500 rounded-lg shadow-lg shadow-emerald-600/30 transition-all";
                     }
 
-                    // Update Cards
                     document.getElementById('walletBalance').innerText = '$' + parseFloat(data.wallet_balance).toFixed(2);
                     document.getElementById('totalEquity').innerText = '$' + parseFloat(data.equity).toFixed(2);
-                    
+
                     const floatingStr = formatColor(data.total_unrealized, false, '$') + ' (' + formatColor(data.total_active_roe, true) + ')';
                     document.getElementById('floatingPnl').innerHTML = floatingStr;
 
                     const netStr = formatColor(data.net_profit.replace(/[+$]/g,''), false, '$') + ' (' + formatColor(data.net_roe.replace(/[+%]/g,''), true) + ')';
                     document.getElementById('netProfit').innerHTML = netStr;
 
-                    // Update Counters
                     document.getElementById('goldCount').innerText = data.gold_positions.length;
                     document.getElementById('vipCount').innerText = data.vip_positions.length;
                     document.getElementById('altCount').innerText = data.alt_positions.length;
 
-                    // Update Tables & Chart
                     renderTableRows('goldTable', data.gold_positions, 'Radar Emas mengintai, mencari sinyal volume valid... 🕵️‍♂️');
                     renderTableRows('vipTable', data.vip_positions, 'Tidak ada posisi VIP aktif. Menunggu momen Sniper... 🎯');
                     renderTableRows('altTable', data.alt_positions, 'Tidak ada posisi Altcoin aktif. Menunggu momen Sniper... 🎯');
-                    
+
                     renderLedger(data.ledger);
                     updateChart(data.ledger);
                 }
@@ -331,7 +331,6 @@
             }
         }
 
-        // Action: Toggle Bot
         async function toggleBot() {
             try {
                 await fetch('/api/toggle', { method: 'POST' });
@@ -341,7 +340,6 @@
             }
         }
 
-        // Action: Close All Positions
         function closeAllPositions() {
             Swal.fire({
                 title: 'Panic Close All?',
@@ -356,26 +354,12 @@
                 color: '#f8fafc'
             }).then(async (result) => {
                 if (result.isConfirmed) {
-                    Swal.fire({
-                        title: 'Mengeksekusi...',
-                        text: 'Membatalkan order dan menutup posisi...',
-                        background: '#1e293b',
-                        color: '#f8fafc',
-                        allowOutsideClick: false,
-                        didOpen: () => { Swal.showLoading() }
-                    });
-                    
+                    Swal.fire({ title: 'Mengeksekusi...', text: 'Membatalkan order dan menutup posisi...', background: '#1e293b', color: '#f8fafc', allowOutsideClick: false, didOpen: () => { Swal.showLoading() } });
                     try {
                         const res = await fetch('/api/close_all', { method: 'POST' });
                         const data = await res.json();
                         if(data.status === 'success') {
-                            Swal.fire({
-                                title: 'Cleaned!',
-                                text: data.message,
-                                icon: 'success',
-                                background: '#1e293b',
-                                color: '#f8fafc'
-                            });
+                            Swal.fire({ title: 'Cleaned!', text: data.message, icon: 'success', background: '#1e293b', color: '#f8fafc' });
                             updateDashboard();
                         } else {
                             Swal.fire('Error', data.message, 'error');
@@ -387,9 +371,57 @@
             })
         }
 
+        // FUNGSI EXPORT VISUAL
+        function exportVisual() {
+            const target = document.getElementById('exportTarget');
+            Swal.fire({ title: 'Mencetak Portofolio...', text: 'Mohon tunggu sebentar.', background: '#1e293b', color: '#f8fafc', didOpen: () => { Swal.showLoading() } });
+            html2canvas(target, { scale: 2, useCORS: true, backgroundColor: '#0f172a' }).then(canvas => {
+                let link = document.createElement('a');
+                let dateStr = new Date().toISOString().slice(0,10);
+                link.download = `nazBot_Portfolio_${dateStr}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+                Swal.fire({ title: 'Berhasil!', text: 'Gambar portofolio telah diunduh.', icon: 'success', background: '#1e293b', color: '#f8fafc', timer: 2000, showConfirmButton: false });
+            }).catch(err => {
+                Swal.fire('Error', 'Gagal mencetak gambar.', 'error');
+            });
+        }
+
+        // FUNGSI BARU: EXPORT EXCEL (.xlsx)
+        function exportExcel() {
+            Swal.fire({ title: 'Mengekspor Data...', background: '#1e293b', color: '#f8fafc', didOpen: () => { Swal.showLoading() } });
+            try {
+                let table = document.getElementById("datatable_ledger");
+
+                // Membaca tabel dengan raw: true agar Excel tidak memformat angka otomatis
+                let wb = XLSX.utils.table_to_book(table, {
+                    sheet: "Ledger nazBot",
+                    raw: true // <--- KUNCINYA DI SINI: Ambil data apa adanya dari dashboard
+                });
+
+                // Tambahan: Memastikan semua sel dibaca sebagai string untuk amannya
+                let ws = wb.Sheets["Ledger nazBot"];
+                for (let cell in ws) {
+                    if (ws[cell].v !== undefined && typeof ws[cell].v === 'string') {
+                        // Menghapus tag HTML jika ada yang terselip
+                        ws[cell].v = ws[cell].v.replace(/<[^>]*>?/gm, '');
+                    }
+                }
+
+                let dateStr = new Date().toISOString().slice(0,10);
+                let fileName = `nazBot_Ledger_${dateStr}.xlsx`;
+
+                XLSX.writeFile(wb, fileName);
+
+                Swal.fire({ title: 'Berhasil!', text: 'Data Excel sesuai Dashboard!', icon: 'success', background: '#1e293b', color: '#f8fafc', timer: 2000, showConfirmButton: false });
+            } catch (error) {
+                Swal.fire({ title: 'Error', text: 'Gagal export: ' + error.message, icon: 'error', background: '#1e293b' });
+            }
+        }
+
         // Loop Refresh Tiap 2 Detik
         setInterval(updateDashboard, 2000);
-        updateDashboard(); // First run
+        updateDashboard(); 
     </script>
 </body>
 </html>
