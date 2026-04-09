@@ -1,103 +1,66 @@
-# nazBot Sniper — BETA v4.0
+# 🚀 nazBot Sniper System [BETA v3.3 - Dynamic Recovery]
 
-Binance Futures Trading Bot + Web Dashboard  
-**50× Leverage · $5 Base Margin · 100% ROE TP · -150% ROE SL (Short)**
+**nazBot Sniper** adalah sistem *Automated Algorithmic Trading* yang dirancang khusus untuk pasar **Binance Futures**. Dibangun dengan Python dan antarmuka Web Dashboard interaktif, bot ini menggunakan pendekatan presisi tinggi (Sniper) dipadukan dengan jaring pengaman *Dynamic Cost Averaging* (DCA) berlapis.
 
----
+## ✨ Fitur Utama (Core Features)
 
-## Architecture
+### 🎯 1. Strategi "5-Confluence" (Akurasi Tinggi)
+Bot hanya akan membuka posisi (ENTRY) jika dan hanya jika 5 syarat teknikal ini terpenuhi secara bersamaan dalam satu *candlestick*:
+* **Trend Alignment:** Harga harus searah dengan EMA 200.
+* **Volume Anomaly:** Terjadi lonjakan volume minimal 1.2x dari rata-rata (MA 20).
+* **Price Rejection (Pinbar):** Terdapat ekor *candle* (shadow) penolakan yang kuat.
+* **Dynamic Walls:** Harga menyentuh atau menyerempet MA 99 atau pita luar Bollinger Bands.
+* **Static S/R:** Harga berada di area *Support* atau *Resistance* 100 candle terakhir.
 
-```
-nazbot/
-├── main.py            ← Entry point: starts Flask + Bot Engine
-├── app.py             ← Flask API server (dashboard endpoints)
-├── bot_logic.py       ← Trading engine (5-layer confluence)
-├── templates/
-│   └── index.html     ← Web dashboard (dark theme, 8-col ledger, Chart.js)
-├── requirements.txt   ← Python dependencies
-├── profit_ledger.txt  ← 8-column trade ledger (auto-created)
-├── status.txt         ← Bot ON/OFF state
-└── start_balance.txt  ← Baseline balance for growth% calculation
-```
+### 🛡️ 2. Dynamic Take Profit & 7-Level DCA
+Sistem pemulihan (*recovery*) super tangguh untuk mencegah kerugian saat pasar berbalik arah (Floating Loss):
+* **7 Lapis DCA:** Menembak peluru DCA secara bertahap saat ROE menyentuh -100%, -200%, -300%, -400%, -600%, -800%, hingga -1000%.
+* **Dynamic TP Scaling:** Ego trading dikontrol oleh mesin. 
+    * *Belum DCA / DCA 1x* ➡️ Target Take Profit **100% ROE**.
+    * *DCA 2x* ➡️ Target Take Profit turun menjadi **50% ROE**.
+    * *DCA 3x atau lebih* ➡️ Mode Survival aktif! Target Take Profit menjadi **15% ROE** (Exit cepat untuk memutar kembali modal).
 
----
+### ⚡ 3. Failsafe Virtual & Resurrection Logic
+* **Virtual SL/TP:** Mengatasi *slippage* atau kegagalan API Binance. Bot mengecek ROE setiap detik. Jika target tercapai, bot langsung membanting setir melakukan *Market Close*.
+* **Auto-Resurrection:** Jika server/bot sempat mati, saat dihidupkan kembali, bot akan langsung mendeteksi posisi yang tertinggal dan melakukan *Rapid-Fire DCA* massal sesuai dengan level kerugian.
 
-## Quick Start (Replit / Linux Server)
+### 👻 4. Liquidity Guard
+Bot terintegrasi dengan filter likuiditas (*Anti-Dummy Coin*). Hanya koin dengan volume transaksi 24 Jam di atas **$1,000,000 USDT** yang akan masuk ke dalam radar. Ini mencegah bot terjebak pada koin dengan *slippage* brutal atau tanpa *order book*.
 
-### 1. Install dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Set environment variables (Replit Secrets / .env)
-```
-BINANCE_API_KEY=your_key_here
-BINANCE_API_SECRET=your_secret_here
-```
-
-### 3. Choose Testnet or Live
-In **bot_logic.py** and **app.py**, change:
-```python
-# Testnet (safe):
-_client = Client(API_KEY, API_SECRET, testnet=True)
-
-# Live account:
-_client = Client(API_KEY, API_SECRET, testnet=False)
-```
-
-### 4. Run
-```bash
-python main.py
-```
-Dashboard opens at: **http://localhost:8080**
+### 📊 5. Web Dashboard & Portfolio Export
+Antarmuka UI/UX modern bergaya *Glassmorphism* untuk memantau performa bot secara *real-time*:
+* **Live PNL & Wallet Balance Monitoring.**
+* **Panic Button (CLOSE ALL):** Satu klik untuk membatalkan semua order dan menutup semua posisi aktif.
+* **📸 Export Visual:** Fitur tangkapan layar Jurnal & Grafik menjadi file PNG resolusi tinggi untuk portofolio.
+* **📊 Export Excel:** Fitur ekstraksi data Jurnal ke dalam format `.xlsx` murni untuk analisis lanjutan.
 
 ---
 
-## Core Bot Rules
-
-| Rule | Value |
-|------|-------|
-| Leverage | 50× (hard-coded) |
-| Base Margin | $5 per entry |
-| Take Profit | 100% ROE — instant LIMIT order |
-| Long Stop Loss | None — 3-Stage DCA handles drawdown |
-| Short Stop Loss | -150% ROE — STOP_MARKET |
-| Gold Slot | 1 × PAXGUSDT |
-| VIP Slots | 8 × (BTC ETH SOL BNB ADA DOT XRP ALICE) |
-| Alt Slots | 8 × (4 Aggressive 5m + 4 Safe 15m) |
+## 🛠️ Stack Teknologi
+* **Backend:** Python 3.x, Flask (Web Server)
+* **Trading Engine:** `python-binance` (Binance API), `pandas`, `ta` (Technical Analysis Library)
+* **Frontend UI:** HTML5, Tailwind CSS, SweetAlert2, Chart.js
+* **Export Tools:** `html2canvas` (Image), `SheetJS` (Excel)
 
 ---
 
-## 5-Layer Confluence Engine (v4.0)
+## ⚙️ Cara Instalasi & Setup
 
-| Layer | Indicator | Purpose |
-|-------|-----------|---------|
-| 1 | EMA 200 (15m) | Macro trend alignment |
-| 2 | MA 99 + Bollinger Bands | Dynamic walls (support/resistance) |
-| 3 | Volume MA × 1.5 | Volume spike confirmation |
-| 4 | Static Swing S/R (50 bars) | Key price level proximity |
-| 5 | Pinbar / Rejection Candle | Price action quality filter |
+1. **Clone Repository / Setup di Replit:**
+   Pastikan struktur file sudah sesuai (`main.py`, `app.py`, `bot_logic.py`, dan folder `templates/index.html`).
 
-**LONG** = Bullish pinbar bouncing off support + volume spike  
-**SHORT** = Bearish pinbar rejected from resistance + volume spike
+2. **Environment Variables (Rahasia API):**
+   Masukkan API Key Binance kamu di bagian *Secrets* (Replit) atau `.env` file:
+   * `BINANCE_API_KEY` = *Your_API_Key*
+  
+## ⚠️ Peringatan Penting (Keep Alive)
+Karena bot ini beroperasi di cloud (seperti Replit), server bisa "tertidur" jika tidak ada aktivitas. SANGAT DISARANKAN untuk menyambungkan URL Webview Dashboard bot ini ke layanan pemantau seperti UptimeRobot atau Cron-job.org (Ping setiap 5 menit) agar bot tetap "melek" 24/7 dan tidak ketinggalan momen DCA.
 
----
+📜 Disclaimer
+Cryptocurrency futures trading carries a high level of risk and may not be suitable for all investors. This bot is provided "as is" for educational and experimental purposes. The creator is not responsible for any financial losses incurred while using this software.
+   * `BINANCE_API_SECRET` = *Your_API_Secret*
 
-## Profit Ledger Format
-
-```
-TIME | PAIR | PROFIT $ | ROE % | TOTAL PNL $ | TOTAL ROE % | SALDO BINANCE | GROWTH %
-```
-
----
-
-## Dashboard Endpoints
-
-| Route | Method | Purpose |
-|-------|--------|---------|
-| `/` | GET | Web dashboard |
-| `/api/data` | GET | Positions + ledger + balances |
-| `/api/ledger_chart` | GET | Time-series for growth chart |
-| `/api/toggle` | POST | Start / Stop bot |
-| `/api/close_all` | POST | Emergency panic close |
-| `/api/status` | GET | Bot ON/OFF state |
+3. **Install Dependencies:**
+   Jalankan perintah ini di console/terminal:
+   ```bash
+   pip install pandas ta python-binance flask
