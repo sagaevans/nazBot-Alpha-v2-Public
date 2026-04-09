@@ -1,7 +1,7 @@
 # ==========================================
-# nazBot Sniper System [BETA v3.1.5 - ULTIMATE HYBRID]
+# nazBot Sniper System [BETA v3.3 - DYNAMIC RECOVERY]
 # FILE: bot_logic.py
-# FUNGSI: Custom 5-Confluence, Memory PNL, & Hybrid TP/SL
+# FUNGSI: 7-Level DCA, Dynamic TP (100% -> 50% -> 15%), Liquidity Guard
 # ==========================================
 
 from __future__ import annotations
@@ -29,22 +29,26 @@ API_SECRET = os.environ.get('BINANCE_API_SECRET', '')
 
 # --- PENGATURAN MUTLAK PRO ---
 TARGET_LEVERAGE = 50
-BASE_MARGIN = 5.0
-TP_TARGET_ROE = 1.00       # Target 100% ROE (Double Modal)
-SHORT_SL_ROE = 1.50        # Stop Loss Khusus SHORT (-150%)
+BASE_MARGIN = 3.0          # Margin $3 agar aman dari MIN_NOTIONAL
+TP_TARGET_ROE = 1.00       # Target Default 100% ROE
+SHORT_SL_ROE = 1.00        # Stop Loss Khusus SHORT (-100%)
 
-# --- PENGATURAN VOLUME FILTER (CUSTOM USER) ---
+# --- PENGATURAN VOLUME FILTER & LIKUIDITAS ---
 VOL_MA_PERIOD = 20         
-VOL_MULTIPLIER = 1.2       # Sudah dilonggarkan jadi 1.2x
+VOL_MULTIPLIER = 1.2       
+MIN_24H_VOLUME = 1_000_000.0 # Koin minimal volume 1 Juta USDT
 
-# --- PENGATURAN DCA DINAMIS 3-TAHAP (HANYA LONG) ---
-DCA_1_DROP_PERCENT = 2.0  
-DCA_2_DROP_PERCENT = 3.0  
-DCA_3_DROP_PERCENT = 4.0  
-
-DCA_1_MARGIN_RATIO = 0.50  
-DCA_2_MARGIN_RATIO = 0.50  
-DCA_3_MARGIN_RATIO = 1.00  
+# --- PENGATURAN 7-LAPIS DCA (HANYA LONG) ---
+# Format: (Trigger ROE %, Target Suntikan Margin $)
+DCA_STAGES = [
+    (-100.0, 1.0), # DCA 1
+    (-200.0, 1.0), # DCA 2
+    (-300.0, 2.0), # DCA 3
+    (-400.0, 4.0), # DCA 4
+    (-600.0, 5.0), # DCA 5
+    (-800.0, 7.0), # DCA 6
+    (-1000.0, 10.0) # DCA 7
+]
 
 MAX_VIP, MAX_ALT = 8, 8
 EMA_TREND, MA_STRUCT, BB_WINDOW = 200, 99, 20
@@ -73,7 +77,7 @@ TOTAL_CLOSED_ROE_PERCENT = 0.0
 TOTAL_SUCCESS_TRADES = 0
 CLOSED_HISTORY = []
 _coin_escalation_level: Dict[str, int] = {} 
-_position_memory: Dict[str, float] = {}  # Memori PNL detik terakhir
+_position_memory: Dict[str, float] = {}  
 
 _client = Client(API_KEY, API_SECRET, testnet=True) 
 
@@ -240,7 +244,7 @@ def _is_trend_aligned(symbol: str, side: str) -> bool:
         return False
     except Exception: return False
 
-# ========== 5-CONFLUENCE SIGNAL LOGIC (CUSTOM USER) ==========
+# ========== 5-CONFLUENCE SIGNAL LOGIC ==========
 def get_adaptive_signal(symbol: str, tf: str, is_vip: bool) -> Optional[dict]:
     try:
         bars = _api_call(_client.futures_klines, symbol=symbol, interval=tf, limit=300)
@@ -271,7 +275,6 @@ def get_adaptive_signal(symbol: str, tf: str, is_vip: bool) -> Optional[dict]:
         if p_close > p_open and c_close < c_ema200: return None 
         if p_close < p_open and c_close > c_ema200: return None 
 
-        # CUSTOM PROXIMITY & SHADOW
         dynamic_proximity = c_atr * 0.35
         shadow_req = 1.5 if is_vip else 1.0
         c_ma99 = ma99.iat[idx_curr]
@@ -305,7 +308,7 @@ def get_adaptive_signal(symbol: str, tf: str, is_vip: bool) -> Optional[dict]:
         return None
     except Exception: return None
 
-# ========== EXECUTION ENGINE (INSTANT LIMIT TP) ==========
+# ========== EXECUTION ENGINE ==========
 def execute_order(symbol: str, order_side: str, position_side: str, margin_to_use: float, is_dca: bool = False) -> bool:
     try:
         f = _get_exchange_filters(symbol)
@@ -322,32 +325,14 @@ def execute_order(symbol: str, order_side: str, position_side: str, margin_to_us
         qty = min(max_qty, max(min_qty, qty))
         qty_str = f"{qty:.8f}".rstrip('0').rstrip('.')
 
-        # 1. Market Entry
+        # Market Entry
         _api_call(_client.futures_create_order, symbol=symbol, side=order_side, type='MARKET', quantity=qty_str, positionSide=position_side)
 
-        # 2. Instant Limit TP/SL
-        if not is_dca:
-            price_precision = max(0, -int(math.floor(math.log10(tick))))
-            if position_side == 'LONG':
-                tp_raw = curr_price * (1 + (TP_TARGET_ROE / actual_lev))
-                tp_str = f"{round(round(tp_raw / tick) * tick, price_precision):.{price_precision}f}"
-                try: _api_call(_client.futures_create_order, symbol=symbol, side='SELL', type='LIMIT', price=tp_str, quantity=qty_str, positionSide=position_side, timeInForce='GTC')
-                except Exception: pass
-            elif position_side == 'SHORT':
-                tp_raw = curr_price * (1 - (TP_TARGET_ROE / actual_lev))
-                sl_raw = curr_price * (1 + (SHORT_SL_ROE / actual_lev))
-                tp_str = f"{round(round(tp_raw / tick) * tick, price_precision):.{price_precision}f}"
-                sl_str = f"{round(round(sl_raw / tick) * tick, price_precision):.{price_precision}f}"
-                try:
-                    _api_call(_client.futures_create_order, symbol=symbol, side='BUY', type='LIMIT', price=tp_str, quantity=qty_str, positionSide=position_side, timeInForce='GTC')
-                    _api_call(_client.futures_create_order, symbol=symbol, side='BUY', type='STOP_MARKET', stopPrice=sl_str, closePosition=True, positionSide=position_side, timeInForce='GTC', workingType='MARK_PRICE')
-                except Exception: pass
-
-        logger.info(f"🚀 {'DCA' if is_dca else 'ENTRY'} [{position_side}] {symbol} | Margin: ${adjusted_margin:.2f}")
+        logger.info(f"🚀 {'DCA' if is_dca else 'ENTRY'} [{position_side}] {symbol} | Margin Suntikan: ${adjusted_margin:.2f}")
         return True
     except Exception as e: return False
 
-# ========== MONITORING (DCA & VIRTUAL FAILSAFE) ==========
+# ========== 7-LEVEL DCA & DYNAMIC RECOVERY MONITORING ==========
 def _monitor_positions(positions: List[dict]):
     global _position_memory
     for p in positions:
@@ -365,9 +350,32 @@ def _monitor_positions(positions: List[dict]):
         key = f"{symbol}_{pos_side}"
         _position_memory[key] = unrealized
 
-        # --- 1. FAILSAFE VIRTUAL TAKE PROFIT (+100%) ---
-        if roe_percent >= (TP_TARGET_ROE * 100):
-            logger.info(f"💰 VIRTUAL TP TRIGGERED [{symbol}] {roe_percent:.2f}%! Market Close paksa.")
+        # --- DETEKSI LEVEL DCA & TARGET TP DINAMIS ---
+        # Logika: 
+        # Base = 3.0
+        # DCA 1 = +1.0 (Total ~4.0)
+        # DCA 2 = +1.0 (Total ~5.0)
+        # DCA 3 = +2.0 (Total ~7.0)
+
+        current_tp_target = 100.0  # Default 100%
+        mode_str = "NORMAL (100%)"
+
+        if current_margin > (base_adj + 2.5): 
+            # Lebih dari $5.5 -> Artinya sudah masuk DCA 3 atau lebih
+            current_tp_target = 15.0
+            mode_str = "RECOVERY DCA-3+ (15%)"
+        elif current_margin > (base_adj + 1.5): 
+            # Lebih dari $4.5 -> Artinya sudah masuk DCA 2
+            current_tp_target = 50.0
+            mode_str = "DCA-2 (50%)"
+        elif current_margin > (base_adj + 0.5): 
+            # Lebih dari $3.5 -> Artinya sudah masuk DCA 1
+            current_tp_target = 100.0
+            mode_str = "DCA-1 (100%)"
+
+        # --- 1. FAILSAFE VIRTUAL TAKE PROFIT ---
+        if roe_percent >= current_tp_target:
+            logger.info(f"💰 VIRTUAL TP {mode_str} TRIGGERED [{symbol}] {roe_percent:.2f}%! Market Close paksa.")
             try:
                 close_side = 'SELL' if amt > 0 else 'BUY'
                 _api_call(_client.futures_cancel_all_open_orders, symbol=symbol)
@@ -376,7 +384,7 @@ def _monitor_positions(positions: List[dict]):
                 logger.error(f"Gagal Failsafe TP {symbol}: {e}")
             continue
 
-        # --- 2. FAILSAFE VIRTUAL STOP LOSS SHORT (-150%) ---
+        # --- 2. FAILSAFE VIRTUAL STOP LOSS SHORT ---
         if amt < 0 and roe_percent <= -(SHORT_SL_ROE * 100):
             logger.info(f"🛑 VIRTUAL SL TRIGGERED [{symbol}] {roe_percent:.2f}%! Market Close paksa.")
             try:
@@ -385,14 +393,21 @@ def _monitor_positions(positions: List[dict]):
             except Exception: pass
             continue
 
-        # --- 3. DCA KHUSUS LONG ---
+        # --- 3. 7-LAPIS DCA (LONG & RESURRECTION LOGIC) ---
         if amt > 0:
-            if roe_percent <= -(DCA_1_DROP_PERCENT * actual_lev) and current_margin < (base_adj + 2.0):
-                execute_order(symbol, 'BUY', 'LONG', base_adj * DCA_1_MARGIN_RATIO, is_dca=True)
-            elif roe_percent <= -(DCA_2_DROP_PERCENT * actual_lev) and current_margin < (base_adj * (1 + DCA_1_MARGIN_RATIO) + 2.0):
-                execute_order(symbol, 'BUY', 'LONG', base_adj * DCA_2_MARGIN_RATIO, is_dca=True)
-            elif roe_percent <= -(DCA_3_DROP_PERCENT * actual_lev) and current_margin < (base_adj * (1 + DCA_1_MARGIN_RATIO + DCA_2_MARGIN_RATIO) + 2.0):
-                execute_order(symbol, 'BUY', 'LONG', base_adj * DCA_3_MARGIN_RATIO, is_dca=True)
+            expected_total_margin = base_adj
+            for i, (trigger_roe, dca_amount) in enumerate(DCA_STAGES):
+                # Hitung batas margin yang seharusnya jika level ini BELUM dieksekusi
+                expected_margin_threshold = expected_total_margin + (dca_amount * 0.5) # +0.5 toleransi
+
+                # Jika ROE jebol ke bawah trigger DAN margin saat ini masih lebih kecil dari batas eksekusi
+                if roe_percent <= trigger_roe and current_margin < expected_margin_threshold:
+                    logger.info(f"💉 AUTO-DCA LAPIS {i+1} [{symbol}] Trigger: {trigger_roe}%, Suntikan: ${dca_amount}")
+                    execute_order(symbol, 'BUY', 'LONG', dca_amount, is_dca=True)
+                    break # Break agar bot menembak 1 per 1 di detik berikutnya
+
+                # Tambahkan beban margin untuk kalkulasi level berikutnya
+                expected_total_margin += dca_amount
 
 # ---------- SCANNER & MAIN LOOP ----------
 def _scan_single_alt(symbol: str, active_keys: List[str], allowed_tfs: List[str]) -> Optional[Tuple[str, dict]]:
@@ -444,7 +459,6 @@ def run_bot(stop_event: threading.Event) -> None:
                     for k in closed_keys:
                         symbol = k.split('_')[0]
 
-                        # Ambil dari Memori
                         pnl_usd = _position_memory.get(k, None)
                         if pnl_usd is None: 
                             pnl_usd = _fetch_realized_pnl_fallback(symbol)
@@ -494,10 +508,16 @@ def run_bot(stop_event: threading.Event) -> None:
                                     vip_count += 1
                                     break
 
+                # --- LIQUIDITY GUARD ACTIVE ---
                 if alt_count < MAX_ALT and not _stop_event.is_set():
                     tickers = _get_cached_ticker()
+
+                    # Cek volume 24 jam. Singkirkan yang kurang dari 1 Juta USDT.
                     alts = [t['symbol'] for t in sorted(tickers, key=lambda x: float(x['quoteVolume']), reverse=True)
-                            if t['symbol'].endswith('USDT') and t['symbol'] not in VIP_SET and t['symbol'] not in GOLD_SET][:TOP_ALT_LIMIT]
+                            if t['symbol'].endswith('USDT') 
+                            and float(t['quoteVolume']) >= MIN_24H_VOLUME
+                            and t['symbol'] not in VIP_SET 
+                            and t['symbol'] not in GOLD_SET][:TOP_ALT_LIMIT]
 
                     futures = []
                     for s in alts:
@@ -521,7 +541,7 @@ def run_bot(stop_event: threading.Event) -> None:
 
                 current_time = time.time()
                 if current_time - _last_heartbeat_time >= 60.0:
-                    logger.info(f"👀 System OK [BETA v3.1.5] | VIP: {vip_count}/{MAX_VIP} | ALT: {alt_count}/{MAX_ALT} | GOLD: {gold_active_count}")
+                    logger.info(f"👀 System OK [BETA v3.3 - DYNAMIC TP] | VIP: {vip_count}/{MAX_VIP} | ALT: {alt_count}/{MAX_ALT}")
                     _last_heartbeat_time = current_time
 
                 for _ in range(15):
